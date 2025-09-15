@@ -64,5 +64,5 @@ def webhook():
     return jsonify({"status": "ok", "okx": okx_response}), 200
 
 if __name__ == '__main__':
-    print("🚀 Flask 正在启动，监听 127.0.0.1:5000/webhook")
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    print("🚀 Flask 正在启动，监听 0.0.0.0:5000/webhook")
+    app.run(host="0.0.0.0", port=5000)
