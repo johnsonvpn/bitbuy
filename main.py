@@ -65,4 +65,4 @@ def webhook():
 
 if __name__ == '__main__':
     print("🚀 Flask 正在启动，监听 0.0.0.0:5000/webhook")
-    app.run(host="0.0.0.0", port=80)
+    app.run(host="0.0.0.0", port=443)
