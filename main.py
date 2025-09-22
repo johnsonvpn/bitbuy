@@ -1,68 +1,97 @@
-import os
-import time
-import json
-import base64
 import hmac
+import base64
+import json
+import re
 import requests
 from flask import Flask, request, jsonify
+from datetime import datetime, timezone
 
-# 从环境变量读取 API key
-OKX_API_KEY = os.getenv("OKX_API_KEY")
-OKX_SECRET_KEY = os.getenv("OKX_SECRET_KEY")
-OKX_PASSPHRASE = os.getenv("OKX_PASSPHRASE")
-
-# ⚠️ 推荐先用 OKX 模拟盘
+# ========= 配置 =========
+OKX_API_KEY = "0a5d7703-c03b-4955-8ef5-8ce14ab327c9"
+OKX_SECRET_KEY = "073A9B3817203635D4A126AFB94D1F82"
+OKX_PASSPHRASE = "gamewell810DO*"
 OKX_BASE_URL = "https://www.okx.com"
 
-app = Flask(__name__)
+# ========= 工具函数 =========
+def sign(message, secret_key):
+    mac = hmac.new(secret_key.encode("utf-8"), message.encode("utf-8"), digestmod="sha256")
+    return base64.b64encode(mac.digest()).decode()
 
-def okx_request(method, path, data=None):
-    """签名并请求 OKX API"""
-    ts = time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime())
-    body = json.dumps(data) if data else ""
-    message = f"{ts}{method}{path}{body}"
+def place_order(instId, side, size):
+    url = f"{OKX_BASE_URL}/api/v5/trade/order"
+    # ✅ 使用 UTC ISO8601 毫秒格式
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
-    sign = base64.b64encode(
-        hmac.new(OKX_SECRET_KEY.encode(), message.encode(), digestmod="sha256").digest()
-    ).decode()
+    # 根据instId提取ccy参数
+    ccy = instId.split("-")[0]  # 从交易对中提取货币，例如从 "BTC-USDT" 提取 "BTC"
+    
+    body = {
+        "instId": instId,
+        "tdMode": "cross",
+        "side": side,
+        "ordType": "market",
+        "sz": str(size),
+        "ccy": ccy
+    }
+
+    message = timestamp + "POST" + "/api/v5/trade/order" + json.dumps(body)
+    signature = sign(message, OKX_SECRET_KEY)
 
     headers = {
         "OK-ACCESS-KEY": OKX_API_KEY,
-        "OK-ACCESS-SIGN": sign,
-        "OK-ACCESS-TIMESTAMP": ts,
+        "OK-ACCESS-SIGN": signature,
+        "OK-ACCESS-TIMESTAMP": timestamp,
         "OK-ACCESS-PASSPHRASE": OKX_PASSPHRASE,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-simulated-trading": "1"   # ✅ 模拟盘，真实下单请去掉
     }
 
-    url = OKX_BASE_URL + path
-    print(f"🔗 请求 OKX: {url} data={data}")
+    print("\n========== OKX API Request ==========")
+    print("➡️ URL:", url)
+    print("➡️ Method: POST")
+    print("➡️ Body:", json.dumps(body))
+    print("➡️ Headers:", headers)
 
-    r = requests.request(method, url, headers=headers, data=body)
-    print("📩 返回:", r.status_code, r.text)
-    return r.json()
+    resp = requests.post(url, headers=headers, data=json.dumps(body))
+    print("⬅️ Response Status:", resp.status_code)
+    print("⬅️ Response Body:", resp.text)
+    print("=====================================\n")
 
-@app.route('/webhook', methods=['POST'])
+    return resp.json()
+
+# ========= Flask 应用 =========
+app = Flask(__name__)
+
+@app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json()
-    print("✅ 收到 TradingView 信号:", data)
+    try:
+        data = request.get_data(as_text=True)
+        print("📩 收到原始信号:", data)
 
-    # 简单校验
-    if not data or "side" not in data:
-        return jsonify({"error": "无效数据"}), 400
+        # ✅ 正则解析 TradingView 警报
+        match = re.search(r"订单(\w+)@([\d\.]+)成交(\w+)", data)
+        if not match:
+            return jsonify({"error": "无法解析信号"}), 400
 
-    # 调用 OKX 下单接口
-    order_data = {
-        "instId": data.get("instId", "BTC-USDT"),
-        "tdMode": data.get("tdMode", "isolated"),
-        "side": data["side"],
-        "ordType": data.get("ordType", "market"),
-        "sz": data.get("sz", "0.001")  # 下单数量
-    }
+        side = match.group(1).lower()   # buy / sell
+        size = match.group(2)
+        raw_instId = match.group(3)
+        # instId 映射逻辑
+        if raw_instId.endswith(".P"):
+            instId = raw_instId.replace("USDT.P", "-USDT-SWAP")
+        else:
+            instId = raw_instId.replace("USDT", "-USDT")
 
-    okx_response = okx_request("POST", "/api/v5/trade/order", order_data)
+        print(f"✅ 解析结果: side={side}, size={size}, instId={instId}")
 
-    return jsonify({"status": "ok", "okx": okx_response}), 200
+        # ✅ 执行下单
+        result = place_order(instId, side, size)
 
-if __name__ == '__main__':
-    print("🚀 Flask 正在启动，监听 0.0.0.0:5000/webhook")
-    app.run(host="0.0.0.0", port=443)
+        return jsonify(result)
+    except Exception as e:
+        print("❌ 处理请求时出错:", e)
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    print("🚀 Flask Webhook 已启动，监听 http://127.0.0.1:5000/webhook")
+    app.run(host="0.0.0.0", port=5000, debug=True)
