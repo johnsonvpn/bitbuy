@@ -1,0 +1,421 @@
+// Pine Script version 5
+//@version=5
+strategy("大圆点信号交易策略优化版", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.03, initial_capital=100000)
+
+// ===================== 输入参数 =====================
+atrPeriod = input.int(14, "ATR周期", minval=5, maxval=20)
+inputCommissionPercent = input.float(0.03, "手续费百分比", minval=0.0, maxval=1.0, step=0.01)
+profitTrigger = input.float(20.0, "触发回撤止损的收益率 (%)", minval=5.0, step=0.1)
+drawdownStop = input.float(3.0, "回撤止损比例 (%)", minval=0.5, step=0.1)
+maxClosingBars = input.int(1, "最大平仓等待K线数", minval=1, maxval=5)
+leftBars = input.int(3, "波峰波谷左K线数", minval=1)
+rightBars = input.int(3, "波峰波谷右K线数", minval=1)
+
+// ===================== 活跃时间段定义（币圈活跃时间） =====================
+isActiveTime = (hour(time, "UTC") >= 0 and hour(time, "UTC") < 4) or 
+               (hour(time, "UTC") >= 8 and hour(time, "UTC") < 12) or 
+               (hour(time, "UTC") >= 13 and hour(time, "UTC") < 21)
+
+// ===================== 全局变量声明 =====================
+var float longStopPrice = na
+var float shortStopPrice = na
+var bool isClosingPosition = false
+var int closingSinceBar = 0
+var string pendingAction = "none"
+var float lastTradeProfit = na
+var float lastTradeProfitPercent = na
+var int lastTradeNumber = -1
+var float lastCloseTime = 0
+var float peakProfit = na
+var float entryPrice = na
+var string positionSide = "none"
+var float lastSwingHighPrice = na
+var int lastSwingHighBar = na
+var float lastSwingLowPrice = na
+var int lastSwingLowBar = na
+var bool hasPosition = false
+var string lastExitReason = "none"
+var label longStopLabel = na
+var label shortStopLabel = na
+var label longTPLabel = na
+var label shortTPLabel = na
+var bool blockedOpenSignal = false
+var float longTPPrice = na
+var float shortTPPrice = na
+var int entryBarIndex = na
+var bool inLongPosition = false
+var bool inShortPosition = false
+
+// 存储波峰波谷历史
+var float[] swingHighPrices = array.new_float(0)
+var float[] swingLowPrices = array.new_float(0)
+var int lastHighSignalBar = na
+var int lastLowSignalBar = na
+
+// ===================== 平仓状态跟踪 =====================
+isClosingPosition := isClosingPosition and strategy.position_size == 0 ? false : isClosingPosition and bar_index - closingSinceBar >= maxClosingBars ? false : isClosingPosition
+
+// 更新全局仓位状态
+if strategy.position_size == 0
+    hasPosition := false
+    if not na(longStopLabel)
+        label.delete(longStopLabel)
+        longStopLabel := na
+    if not na(shortStopLabel)
+        label.delete(shortStopLabel)
+        shortStopLabel := na
+    if not na(longTPLabel)
+        label.delete(longTPLabel)
+        longTPLabel := na
+    if not na(shortTPLabel)
+        label.delete(shortTPLabel)
+        shortTPLabel := na
+    pendingAction := "none"
+else
+    hasPosition := true
+
+// ===================== 计算下单量和余额检查 =====================
+commissionFactor = 1 + inputCommissionPercent / 100
+qty = strategy.equity / (close * commissionFactor)
+commission = qty * close * inputCommissionPercent / 100
+requiredBalance = qty * close + commission
+sufficientBalance = strategy.equity >= requiredBalance
+minEquityThreshold = strategy.initial_capital * 0.30
+equityAboveThreshold = strategy.equity >= minEquityThreshold
+cooldownPeriod = 60
+isInCooldown = time - lastCloseTime < cooldownPeriod * 1000
+
+// ===================== 执行延迟开仓 =====================
+if pendingAction != "none" and not isClosingPosition and not hasPosition and isActiveTime
+    current_commissionFactor = 1 + inputCommissionPercent / 100
+    current_qty = strategy.equity / (close * current_commissionFactor)
+    current_commission = current_qty * close * inputCommissionPercent / 100
+    current_requiredBalance = current_qty * close + current_commission
+    current_sufficientBalance = strategy.equity >= current_requiredBalance
+    if current_sufficientBalance and equityAboveThreshold and not isInCooldown
+        if pendingAction == "long"
+            longStopPrice := not na(lastSwingLowPrice) ? lastSwingLowPrice : na
+            if not na(longStopPrice)
+                longStopLabel := label.new(lastSwingLowBar, longStopPrice, text="多头止损: " + str.tostring(longStopPrice, "#.#####"), style=label.style_label_down, color=color.new(color.purple, 20), textcolor=color.white, yloc=yloc.belowbar)
+            strategy.entry("PendingLong", strategy.long, qty=current_qty, comment="延迟做多")
+            inLongPosition := true
+            inShortPosition := false
+            entryBarIndex := bar_index
+            longTPPrice := na
+            if not na(longStopPrice)
+                strategy.exit("ExitLongStop", from_entry="PendingLong", stop=longStopPrice, comment="多头止损")
+            pendingAction := "none"
+            hasPosition := true
+            alert("开仓成功: 多头, 交易对: " + syminfo.ticker + ", 波谷买点", alert.freq_once_per_bar)
+        else if pendingAction == "short"
+            shortStopPrice := not na(lastSwingHighPrice) ? lastSwingHighPrice : na
+            if not na(shortStopPrice)
+                shortStopLabel := label.new(lastSwingHighBar, shortStopPrice, text="空头止损: " + str.tostring(shortStopPrice, "#.#####"), style=label.style_label_up, color=color.new(color.purple, 20), textcolor=color.white, yloc=yloc.abovebar)
+            strategy.entry("PendingShort", strategy.short, qty=current_qty, comment="延迟做空")
+            inShortPosition := true
+            inLongPosition := false
+            entryBarIndex := bar_index
+            shortTPPrice := na
+            if not na(shortStopPrice)
+                strategy.exit("ExitShortStop", from_entry="PendingShort", stop=shortStopPrice, comment="空头止损")
+            pendingAction := "none"
+            hasPosition := true
+            alert("开仓成功: 空头, 交易对: " + syminfo.ticker + ", 波峰卖点", alert.freq_once_per_bar)
+    else
+        pendingAction := "none"
+        if not current_sufficientBalance or not equityAboveThreshold
+            alert("开仓失败: 资金不足或低于30%初始本金, 交易对: " + syminfo.ticker, alert.freq_once_per_bar)
+        else if isInCooldown
+            alert("开仓失败: 处于冷却期, 交易对: " + syminfo.ticker, alert.freq_once_per_bar)
+
+// ===================== 波峰波谷检测 =====================
+ph = ta.pivothigh(high, leftBars, rightBars)
+pl = ta.pivotlow(low, leftBars, rightBars)
+
+if not na(ph)
+    lastSwingHighPrice := close[rightBars]
+    lastSwingHighBar := bar_index - rightBars
+    array.push(swingHighPrices, lastSwingHighPrice)
+    if array.size(swingHighPrices) > 10
+        array.shift(swingHighPrices)
+
+if not na(pl)
+    lastSwingLowPrice := close[rightBars]
+    lastSwingLowBar := bar_index - rightBars
+    array.push(swingLowPrices, lastSwingLowPrice)
+    if array.size(swingLowPrices) > 10
+        array.shift(swingLowPrices)
+
+// ===================== 买卖点检测 =====================
+var bool greenDotSignal = false
+var bool redDotSignal = false
+
+// 买点：连续3个以上波峰价格降低后，新波峰价格升高，下一个波谷为买点
+if array.size(swingHighPrices) >= 4
+    bool isDescending = true
+    for i = 0 to 2
+        int idx1 = array.size(swingHighPrices) - 2 - i
+        int idx2 = array.size(swingHighPrices) - 3 - i
+        // 统一在一处进行所有有效性检查
+        if idx1 < 0 or idx2 < 0 or array.get(swingHighPrices, idx1) >= array.get(swingHighPrices, idx2)
+            isDescending := false
+            break
+    if isDescending
+        int size = array.size(swingHighPrices)
+        int lastIndex = size - 1
+        int prevIndex = size - 2
+        // 此时size>=4，lastIndex和prevIndex必然>=0
+        if array.get(swingHighPrices, lastIndex) > array.get(swingHighPrices, prevIndex)
+            if not na(pl) and (na(lastLowSignalBar) or lastSwingLowBar > lastLowSignalBar)
+                greenDotSignal := true
+                lastLowSignalBar := lastSwingLowBar
+
+// 卖点：连续3个以上波谷价格升高后，新波峰价格降低，下一个波峰为卖点
+if array.size(swingLowPrices) >= 4
+    bool isAscending = true
+    for i = 0 to 2
+        int idx1 = array.size(swingLowPrices) - 2 - i
+        int idx2 = array.size(swingLowPrices) - 3 - i
+        // 统一在一处进行所有有效性检查
+        if idx1 < 0 or idx2 < 0 or array.get(swingLowPrices, idx1) <= array.get(swingLowPrices, idx2)
+            isAscending := false
+            break
+    if isAscending
+        int size_high = array.size(swingHighPrices)
+        int lastIndex = size_high - 1
+        int prevIndex = size_high - 2
+        // 此时size_high>=4，lastIndex和prevIndex必然>=0
+        if array.get(swingHighPrices, lastIndex) < array.get(swingHighPrices, prevIndex)
+            if not na(ph) and (na(lastHighSignalBar) or lastSwingHighBar > lastHighSignalBar)
+                redDotSignal := true
+                lastHighSignalBar := lastSwingHighBar
+
+// 阻止多交易对开仓
+blockedOpenSignal := (greenDotSignal or redDotSignal) and hasPosition
+if blockedOpenSignal
+    alert("开仓被阻止: 已有持仓, 交易对: " + syminfo.ticker, alert.freq_once_per_bar)
+
+// 绘制信号
+plotshape(greenDotSignal and not hasPosition, title="绿色大圆点", location=location.belowbar, style=shape.circle, color=color.green, size=size.normal)
+plotshape(redDotSignal and not hasPosition, title="红色大圆点", location=location.abovebar, style=shape.circle, color=color.red, size=size.normal)
+plotchar(blockedOpenSignal, title="开仓阻止", char="!", location=location.abovebar, color=color.red)
+
+// ===================== 持仓收益率 & 回撤止损 =====================
+if strategy.position_size != 0
+    if na(entryPrice)
+        entryPrice := strategy.position_avg_price
+        peakProfit := 0
+        positionSide := strategy.position_size > 0 ? "long" : "short"
+    currentProfit = positionSide == "long" ? (close - entryPrice) / entryPrice * 100 : (entryPrice - close) / entryPrice * 100
+    peakProfit := math.max(peakProfit, currentProfit)
+    drawdown = peakProfit - currentProfit
+    if peakProfit >= profitTrigger and drawdown >= drawdownStop
+        strategy.close_all(comment="回撤止损触发")
+        isClosingPosition := true
+        closingSinceBar := bar_index
+        lastExitReason := "回撤止损"
+        entryPrice := na
+        peakProfit := na
+        positionSide := "none"
+        longStopPrice := na
+        shortStopPrice := na
+        longTPPrice := na
+        shortTPPrice := na
+        inLongPosition := false
+        inShortPosition := false
+        hasPosition := false
+        alert("平仓: 回撤止损, 交易对: " + syminfo.ticker, alert.freq_once_per_bar)
+else
+    entryPrice := na
+    peakProfit := na
+    positionSide := "none"
+    longTPPrice := na
+    shortTPPrice := na
+    inLongPosition := false
+    inShortPosition := false
+    hasPosition := false
+    pendingAction := "none"
+
+// ===================== 跟踪上一单盈亏 =====================
+if strategy.closedtrades > lastTradeNumber
+    lastTradeNumber := strategy.closedtrades
+    lastTradeProfit := strategy.closedtrades.profit(lastTradeNumber - 1)
+    lastTradeProfitPercent := strategy.closedtrades.profit(lastTradeNumber - 1) / (strategy.closedtrades.entry_price(lastTradeNumber - 1) * strategy.closedtrades.size(lastTradeNumber - 1)) * 100
+
+// ===================== 策略执行 =====================
+var bool closeLongSignal = false
+var bool closeShortSignal = false
+
+if greenDotSignal and sufficientBalance and equityAboveThreshold and not isInCooldown and not hasPosition and isActiveTime
+    if strategy.position_size < 0
+        strategy.close("Short", comment="平空-绿点")
+        isClosingPosition := true
+        closingSinceBar := bar_index
+        lastCloseTime := time
+        pendingAction := "long"
+        closeShortSignal := true
+        shortStopPrice := na
+        shortTPPrice := na
+        inShortPosition := false
+        hasPosition := false
+        lastExitReason := "绿点信号平空"
+        if not na(shortStopLabel)
+            label.delete(shortStopLabel)
+            shortStopLabel := na
+        if not na(shortTPLabel)
+            label.delete(shortTPLabel)
+            shortTPLabel := na
+        alert("平仓: 平空-绿点, 交易对: " + syminfo.ticker, alert.freq_once_per_bar)
+    else if strategy.position_size == 0 and not isClosingPosition
+        longStopPrice := not na(lastSwingLowPrice) ? lastSwingLowPrice : na
+        if not na(longStopPrice)
+            longStopLabel := label.new(lastSwingLowBar, longStopPrice, text="多头止损: " + str.tostring(longStopPrice, "#.#####"), style=label.style_label_down, color=color.new(color.purple, 20), textcolor=color.white, yloc=yloc.belowbar)
+        strategy.entry("Long", strategy.long, qty=qty, comment="做多-绿点")
+        inLongPosition := true
+        inShortPosition := false
+        entryBarIndex := bar_index
+        longTPPrice := na
+        if not na(longStopPrice)
+            strategy.exit("ExitLongStop", from_entry="Long", stop=longStopPrice, comment="多头止损")
+        hasPosition := true
+        alert("开仓成功: 多头, 交易对: " + syminfo.ticker + ", 波谷买点", alert.freq_once_per_bar)
+
+if redDotSignal and sufficientBalance and equityAboveThreshold and not isInCooldown and not hasPosition and isActiveTime
+    if strategy.position_size > 0
+        strategy.close("Long", comment="平多-红点")
+        isClosingPosition := true
+        closingSinceBar := bar_index
+        lastCloseTime := time
+        pendingAction := "short"
+        closeLongSignal := true
+        longStopPrice := na
+        longTPPrice := na
+        inLongPosition := false
+        hasPosition := false
+        lastExitReason := "红点信号平多"
+        if not na(longStopLabel)
+            label.delete(longStopLabel)
+            longStopLabel := na
+        if not na(longTPLabel)
+            label.delete(longTPLabel)
+            longTPLabel := na
+        alert("平仓: 平多-红点, 交易对: " + syminfo.ticker, alert.freq_once_per_bar)
+    else if strategy.position_size == 0 and not isClosingPosition
+        shortStopPrice := not na(lastSwingHighPrice) ? lastSwingHighPrice : na
+        if not na(shortStopPrice)
+            shortStopLabel := label.new(lastSwingHighBar, shortStopPrice, text="空头止损: " + str.tostring(shortStopPrice, "#.#####"), style=label.style_label_up, color=color.new(color.purple, 20), textcolor=color.white, yloc=yloc.abovebar)
+        strategy.entry("Short", strategy.short, qty=qty, comment="做空-红点")
+        inShortPosition := true
+        inLongPosition := false
+        entryBarIndex := bar_index
+        shortTPPrice := na
+        if not na(shortStopPrice)
+            strategy.exit("ExitShortStop", from_entry="Short", stop=shortStopPrice, comment="空头止损")
+        hasPosition := true
+        alert("开仓成功: 空头, 交易对: " + syminfo.ticker + ", 波峰卖点", alert.freq_once_per_bar)
+
+// ===================== 止盈逻辑更新 =====================
+if inLongPosition and strategy.position_size > 0
+    if not na(longStopPrice) and close <= longStopPrice
+        strategy.close("Long", comment="多头止损")
+        lastExitReason := "多头止损"
+        longTPPrice := na
+        inLongPosition := false
+        hasPosition := false
+        if not na(longStopLabel)
+            label.delete(longStopLabel)
+            longStopLabel := na
+        if not na(longTPLabel)
+            label.delete(longTPLabel)
+            longTPLabel := na
+        alert("平仓: 多头止损, 交易对: " + syminfo.ticker, alert.freq_once_per_bar)
+    else if not na(ph) and (bar_index - rightBars) > entryBarIndex
+        if na(longTPPrice) or close[rightBars] > longTPPrice
+            longTPPrice := close[rightBars]
+            if not na(longTPLabel)
+                label.delete(longTPLabel)
+            longTPLabel := label.new(bar_index - rightBars, longTPPrice, text="多头止盈: " + str.tostring(longTPPrice, "#.#####"), style=label.style_label_down, color=color.new(color.orange, 20), textcolor=color.white, yloc=yloc.abovebar)
+            strategy.exit("ExitLongTP", from_entry="Long", limit=longTPPrice, comment="多头止盈")
+        else if close[rightBars] < longTPPrice
+            strategy.close("Long", comment="多头止盈 - 新波峰收盘价更低")
+            lastExitReason := "多头止盈 - 新波峰收盘价更低"
+            longTPPrice := na
+            inLongPosition := false
+            hasPosition := false
+            if not na(longStopLabel)
+                label.delete(longStopLabel)
+                longStopLabel := na
+            if not na(longTPLabel)
+                label.delete(longTPLabel)
+                longTPLabel := na
+            alert("平仓: 多头止盈 - 新波峰收盘价更低, 交易对: " + syminfo.ticker, alert.freq_once_per_bar)
+
+if inShortPosition and strategy.position_size < 0
+    if not na(shortStopPrice) and close >= shortStopPrice
+        strategy.close("Short", comment="空头止损")
+        lastExitReason := "空头止损"
+        shortTPPrice := na
+        inShortPosition := false
+        hasPosition := false
+        if not na(shortStopLabel)
+            label.delete(shortStopLabel)
+            shortStopLabel := na
+        if not na(shortTPLabel)
+            label.delete(shortTPLabel)
+            shortTPLabel := na
+        alert("平仓: 空头止损, 交易对: " + syminfo.ticker, alert.freq_once_per_bar)
+    else if not na(pl) and (bar_index - rightBars) > entryBarIndex
+        if na(shortTPPrice) or close[rightBars] < shortTPPrice
+            shortTPPrice := close[rightBars]
+            if not na(shortTPLabel)
+                label.delete(shortTPLabel)
+            shortTPLabel := label.new(bar_index - rightBars, shortTPPrice, text="空头止盈: " + str.tostring(shortTPPrice, "#.#####"), style=label.style_label_up, color=color.new(color.orange, 20), textcolor=color.white, yloc=yloc.belowbar)
+            strategy.exit("ExitShortTP", from_entry="Short", limit=shortTPPrice, comment="空头止盈")
+        else if close[rightBars] > shortTPPrice
+            strategy.close("Short", comment="空头止盈 - 新波谷收盘价更高")
+            lastExitReason := "空头止盈 - 新波谷收盘价更高"
+            shortTPPrice := na
+            inShortPosition := false
+            hasPosition := false
+            if not na(shortStopLabel)
+                label.delete(shortStopLabel)
+                shortStopLabel := na
+            if not na(shortTPLabel)
+                label.delete(shortTPLabel)
+                shortTPLabel := na
+            alert("平仓: 空头止盈 - 新波谷收盘价更高, 交易对: " + syminfo.ticker, alert.freq_once_per_bar)
+
+// ===================== 绘制信号 =====================
+plotshape(closeLongSignal, title="平多信号", location=location.abovebar, style=shape.triangledown, color=color.blue, size=size.small)
+plotshape(closeShortSignal, title="平空信号", location=location.belowbar, style=shape.triangleup, color=color.blue, size=size.small)
+plotshape(pendingAction == "long", title="等待做多", location=location.belowbar, style=shape.labelup, color=color.orange, size=size.small, text="等待做多")
+plotshape(pendingAction == "short", title="等待做空", location=location.abovebar, style=shape.labeldown, color=color.orange, size=size.small, text="等待做空")
+
+// ===================== 信息面板（仅在状态变化时更新） =====================
+var table infoTable = na
+if ta.change(strategy.position_size) or ta.change(lastTradeNumber) or lastExitReason != lastExitReason[1] or barstate.islastconfirmedhistory
+    if not na(infoTable)
+        table.delete(infoTable)
+    infoTable := table.new(position.top_right, 1, 1, bgcolor=color.new(color.yellow, 20), border_width=2)
+    positionStatus = strategy.position_size > 0 ? "多头" : strategy.position_size < 0 ? "空头" : "无"
+    avgPrice = str.tostring(strategy.position_avg_price, "#.#####")
+    longStopText = na(longStopPrice) ? "N/A" : str.tostring(longStopPrice, "#.#####")
+    shortStopText = na(shortStopPrice) ? "N/A" : str.tostring(shortStopPrice, "#.#####")
+    longTPText = na(longTPPrice) ? "N/A" : str.tostring(longTPPrice, "#.#####")
+    shortTPText = na(shortTPPrice) ? "N/A" : str.tostring(shortTPPrice, "#.#####")
+    pendingStatus = pendingAction != "none" ? (pendingAction == "long" ? "等待做多" : "等待做空") : "无"
+    lastTradeText = na(lastTradeProfit) ? "N/A" : str.tostring(lastTradeProfit, "#.##") + " (" + str.tostring(lastTradeProfitPercent, "#.##") + "%)"
+    activeTimeStatus = isActiveTime ? "是" : "否"
+    infoText = "当前交易对: " + syminfo.ticker + "\n" + 
+               "当前持仓: " + positionStatus + "\n" + 
+               "持仓均价: " + avgPrice + "\n" + 
+               "平仓状态: " + (isClosingPosition ? "正在平仓" : "未在平仓") + "\n" + 
+               "等待操作: " + pendingStatus + "\n" + 
+               "最后平仓原因: " + lastExitReason + "\n" + 
+               "上一单盈亏: " + lastTradeText + "\n" + 
+               "多头止损价: " + longStopText + "\n" + 
+               "空头止损价: " + shortStopText + "\n" + 
+               "多头止盈价: " + longTPText + "\n" + 
+               "空头止盈价: " + shortTPText + "\n" + 
+               "当前是否活跃时间: " + activeTimeStatus
+    table.cell(infoTable, 0, 0, infoText, text_color=color.black, text_size=size.normal)
