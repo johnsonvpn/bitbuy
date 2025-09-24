@@ -1,0 +1,152 @@
+//@version=5
+strategy('Swing Hull/rsi/EMA + Supertrend Combo', overlay=true, currency=currency.USD, default_qty_value=4000, default_qty_type=strategy.cash, initial_capital=1000)
+
+//A Swing trading strategy that use a combination of indicators, rsi for target, hull for overall direction enad ema for entering the martket.
+// hull ma copied from syrowof HullMA who copied from mohamed982 :) thanks both
+// Performance 
+
+n = input(title='period', defval=100)
+
+n2ma = 2 * ta.wma(close, math.round(n / 2))
+nma = ta.wma(close, n)
+diff = n2ma - nma
+sqn = math.round(math.sqrt(n))
+
+n2ma1 = 2 * ta.wma(close[1], math.round(n / 2))
+nma1 = ta.wma(close[1], n)
+diff1 = n2ma1 - nma1
+sqn1 = math.round(math.sqrt(n))
+
+n1 = ta.wma(diff, sqn)
+n2 = ta.wma(diff1, sqn)
+c = n1 > n2 ? color.green : color.red
+ma = plot(n1, color=c)
+
+
+
+// RSi and Moving averages
+
+length = input(14)
+overSold = input(80)
+overBought = input(20)
+point = 0.0001
+dev = 2
+
+fastLength = input(50)
+fastLengthL = input(50)
+slowLength = input(100)
+slowLengthL = input(100)
+price = close
+
+mafast = ta.ema(price, fastLength)
+mafastL = ta.ema(price, fastLengthL)
+maslow = ta.ema(price, slowLength)
+maslowL = ta.ema(price, slowLengthL)
+vrsi = ta.rsi(price, length)
+cShort = ta.crossunder(vrsi, overBought)
+
+condDown = n2 >= n1
+condUp = condDown != true
+closeLong = ta.crossover(vrsi, overSold)
+closeShort = cShort
+
+
+// Supertrend Parameters
+st_periods = input.int(title="ATR Period (Supertrend)", defval=10, group="Supertrend")
+st_src = input.source(hl2, title="Source (Supertrend)", group="Supertrend")
+st_multiplier = input.float(title="ATR Multiplier (Supertrend)", step=0.1, defval=3.0, group="Supertrend")
+st_changeATR = input.bool(title="Change ATR Calculation Method? (Supertrend)", defval=true, group="Supertrend")
+
+st_atr2 = ta.sma(ta.tr, st_periods)
+st_atr = st_changeATR ? ta.atr(st_periods) : st_atr2
+st_up = st_src - (st_multiplier * st_atr)
+st_up1 = nz(st_up[1], st_up)
+st_up := close[1] > st_up1 ? math.max(st_up, st_up1) : st_up
+st_dn = st_src + (st_multiplier * st_atr)
+st_dn1 = nz(st_dn[1], st_dn)
+st_dn := close[1] < st_dn1 ? math.min(st_dn, st_dn1) : st_dn
+st_trend = 1
+st_trend := nz(st_trend[1], st_trend)
+st_trend := st_trend == -1 and close > st_dn1 ? 1 : st_trend == 1 and close < st_up1 ? -1 : st_trend
+st_buySignal = st_trend == 1 and st_trend[1] == -1
+st_sellSignal = st_trend == -1 and st_trend[1] == 1
+
+// Strategy Logic
+longCondition = n1 > n2
+shortCondition = longCondition != true
+
+// === 记录1号策略最近一次信号类型 ===
+var int last_signal = na  // 1=long, -1=short, na=none
+
+// === 1号策略建仓逻辑（不依赖Supertrend信号）===
+if not na(vrsi)
+    if shortCondition
+        if price[0] < maslow[0] and price[1] > mafast[1]
+            strategy.entry('SYS-SHORT', strategy.short, comment='short')
+            last_signal := -1
+    if longCondition
+        if price[0] < mafast[0] and price[1] > mafast[1]
+            strategy.entry('SYS-LONG', strategy.long, comment='long')
+            last_signal := 1
+
+// === 2号策略出现卖信号时，若1号策略当前持有多单，则平多仓 ===
+if st_sellSignal
+    if strategy.position_size > 0 and last_signal == 1
+        strategy.close('SYS-LONG', comment='Supertrend Sell Close')
+
+// === 2号策略出现买信号时，若1号策略当前持有空单，则平空仓 ===
+if st_buySignal
+    if strategy.position_size < 0 and last_signal == -1
+        strategy.close('SYS-SHORT', comment='Supertrend Buy Close')
+
+// === 1号策略原有平仓逻辑（可保留或按需调整）===
+strategy.close('SYS-SHORT', when=ta.crossunder(vrsi, overBought))
+strategy.close('SYS-LONG', when=ta.crossover(vrsi, overSold))
+
+
+// Stop Loss 
+
+
+sl = input(75)
+Stop = sl * 10
+
+
+
+strategy.exit('Out Long', 'SYS-LONG', loss=Stop)
+strategy.exit('Out Short', 'SYS-SHORT', loss=Stop)
+
+
+
+//plot(strategy.equity, title="equity", color=red, linewidth=2, style=areabr)
+
+strategy.exit('Out Long', 'SYS-LONG', loss=Stop)
+strategy.exit('Out Short', 'SYS-SHORT', loss=Stop)
+
+
+
+//plot(strategy.equity, title="equity", color=red, linewidth=2, style=areabr)
+
+// === 标注多单、空单开仓和平仓 ===
+var float long_entry_price = na
+var float short_entry_price = na
+
+// 多单开仓标记
+long_entry = not na(vrsi) and longCondition and price[0] < mafast[0] and price[1] > mafast[1]
+if long_entry
+    long_entry_price := close
+plotshape(long_entry, title="Long Entry", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.small, offset=0, text="多开")
+
+// 空单开仓标记
+short_entry = not na(vrsi) and shortCondition and price[0] < maslow[0] and price[1] > mafast[1]
+if short_entry
+    short_entry_price := close
+plotshape(short_entry, title="Short Entry", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.small, offset=0, text="空开")
+
+// 多单平仓标记（Supertrend或RSI平仓）
+long_exit = ((st_sellSignal and strategy.position_size > 0 and last_signal == 1) or ta.crossover(vrsi, overSold))
+plotshape(long_exit, title="Long Exit", location=location.abovebar, color=color.green, style=shape.xcross, size=size.tiny, offset=0, text="多平")
+
+// 空单平仓标记（Supertrend或RSI平仓）
+short_exit = ((st_buySignal and strategy.position_size < 0 and last_signal == -1) or ta.crossunder(vrsi, overBought))
+plotshape(short_exit, title="Short Exit", location=location.belowbar, color=color.red, style=shape.xcross, size=size.tiny, offset=0, text="空平")
+
