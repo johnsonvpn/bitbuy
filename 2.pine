@@ -1,37 +1,35 @@
-//@version=4
-study("Supertrend", overlay = true, format=format.price, precision=2, resolution="")
+//@version=6
 
-Periods = input(title="ATR Period", type=input.integer, defval=10)
-src = input(hl2, title="Source")
-Multiplier = input(title="ATR Multiplier", type=input.float, step=0.1, defval=3.0)
-changeATR= input(title="Change ATR Calculation Method ?", type=input.bool, defval=true)
-showsignals = input(title="Show Buy/Sell Signals ?", type=input.bool, defval=true)
-highlighting = input(title="Highlighter On/Off ?", type=input.bool, defval=true)
-atr2 = sma(tr, Periods)
-atr= changeATR ? atr(Periods) : atr2
-up=src-(Multiplier*atr)
-up1 = nz(up[1],up)
-up := close[1] > up1 ? max(up,up1) : up
-dn=src+(Multiplier*atr)
-dn1 = nz(dn[1], dn)
-dn := close[1] < dn1 ? min(dn, dn1) : dn
-trend = 1
-trend := nz(trend[1], trend)
-trend := trend == -1 and close > dn1 ? 1 : trend == 1 and close < up1 ? -1 : trend
-upPlot = plot(trend == 1 ? up : na, title="Up Trend", style=plot.style_linebr, linewidth=2, color=color.green)
-buySignal = trend == 1 and trend[1] == -1
-plotshape(buySignal ? up : na, title="UpTrend Begins", location=location.absolute, style=shape.circle, size=size.tiny, color=color.green, transp=0)
-plotshape(buySignal and showsignals ? up : na, title="Buy", text="Buy", location=location.absolute, style=shape.labelup, size=size.tiny, color=color.green, textcolor=color.white, transp=0)
-dnPlot = plot(trend == 1 ? na : dn, title="Down Trend", style=plot.style_linebr, linewidth=2, color=color.red)
-sellSignal = trend == -1 and trend[1] == 1
-plotshape(sellSignal ? dn : na, title="DownTrend Begins", location=location.absolute, style=shape.circle, size=size.tiny, color=color.red, transp=0)
-plotshape(sellSignal and showsignals ? dn : na, title="Sell", text="Sell", location=location.absolute, style=shape.labeldown, size=size.tiny, color=color.red, textcolor=color.white, transp=0)
-mPlot = plot(ohlc4, title="", style=plot.style_circles, linewidth=0)
-longFillColor = highlighting ? (trend == 1 ? color.green : color.white) : color.white
-shortFillColor = highlighting ? (trend == -1 ? color.red : color.white) : color.white
-fill(mPlot, upPlot, title="UpTrend Highligter", color=longFillColor)
-fill(mPlot, dnPlot, title="DownTrend Highligter", color=shortFillColor)
-alertcondition(buySignal, title="SuperTrend Buy", message="SuperTrend Buy!")
-alertcondition(sellSignal, title="SuperTrend Sell", message="SuperTrend Sell!")
-changeCond = trend != trend[1]
-alertcondition(changeCond, title="SuperTrend Direction Change", message="SuperTrend has changed direction!")
+indicator("均线系统交易", shorttitle="均", overlay=true)
+
+// —— 均线计算
+sma20  = ta.sma(close, 20)
+sma60  = ta.sma(close, 60)
+sma120 = ta.sma(close, 120)
+
+ema20  = ta.ema(close, 20)
+ema60  = ta.ema(close, 60)
+ema120 = ta.ema(close, 120)
+
+// —— 绘制均线
+plot(sma20,  color=color.black,                title="SMA20")
+plot(ema20,  color=color.new(color.black, 50), title="EMA20")
+
+plot(sma60,  color=color.blue,                 title="SMA60")
+plot(ema60,  color=color.new(color.blue, 50),  title="EMA60")
+
+plot(sma120, color=color.purple,               title="SMA120")
+plot(ema120, color=color.new(color.purple, 50),title="EMA120")
+
+// —— 圆点定位
+cond    = barstate.islast
+bl      = low
+
+moveBar = input.int(0,   title="Move Bar")
+x20     = input.int(20,  title="X20 Offset")  + moveBar
+x60     = input.int(60,  title="X60 Offset")  + moveBar
+x120    = input.int(120, title="X120 Offset") + moveBar
+
+plot(cond ? bl[20]  : na, color=color.new(#FFC40C, 0), linewidth=5, offset=-x20,  style=plot.style_circles, title="Dot20")
+plot(cond ? bl[60]  : na, color=color.new(#FFC40C, 0), linewidth=5, offset=-x60,  style=plot.style_circles, title="Dot60")
+plot(cond ? bl[120] : na, color=color.new(#FFC40C, 0), linewidth=5, offset=-x120, style=plot.style_circles, title="Dot120")
