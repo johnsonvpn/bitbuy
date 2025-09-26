@@ -99,10 +99,6 @@ if st_buySignal
     if strategy.position_size < 0 and last_signal == -1
         strategy.close('SYS-SHORT', comment='Supertrend Buy Close')
 
-// === 1号策略原有平仓逻辑（可保留或按需调整）===
-strategy.close('SYS-SHORT', when=ta.crossunder(vrsi, overBought))
-strategy.close('SYS-LONG', when=ta.crossover(vrsi, overSold))
-
 
 // Stop Loss 
 
@@ -142,11 +138,6 @@ if short_entry
     short_entry_price := close
 plotshape(short_entry, title="Short Entry", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.small, offset=0, text="空开")
 
-// 多单平仓标记（Supertrend或RSI平仓）
-long_exit = ((st_sellSignal and strategy.position_size > 0 and last_signal == 1) or ta.crossover(vrsi, overSold))
-plotshape(long_exit, title="Long Exit", location=location.abovebar, color=color.green, style=shape.xcross, size=size.tiny, offset=0, text="多平")
-
-// 空单平仓标记（Supertrend或RSI平仓）
-short_exit = ((st_buySignal and strategy.position_size < 0 and last_signal == -1) or ta.crossunder(vrsi, overBought))
-plotshape(short_exit, title="Short Exit", location=location.belowbar, color=color.red, style=shape.xcross, size=size.tiny, offset=0, text="空平")
+// 多单平仓标记（只标注由Supertrend信号触发的平仓）
+// ...existing code...
 
