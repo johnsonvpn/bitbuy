@@ -1,152 +1,151 @@
-//@version=5
-strategy('Swing Hull/rsi/EMA + Supertrend Combo', overlay=true, currency=currency.USD, default_qty_value=4000, default_qty_type=strategy.cash, initial_capital=1000)
+//@version=6
+strategy("双曲线密集交易策略 v6 - 上轨空下轨多", overlay=true, margin_long=100, margin_short=100, 
+     default_qty_type=strategy.percent_of_equity, default_qty_value=10)
 
-//A Swing trading strategy that use a combination of indicators, rsi for target, hull for overall direction enad ema for entering the martket.
-// hull ma copied from syrowof HullMA who copied from mohamed982 :) thanks both
-// Performance 
+// ===== 输入参数 =====
+len      = input.int(50, "均线长度", minval=1)
+k        = input.float(2.0, "双曲线系数K", minval=0.1, step=0.1)
+atrLen   = input.int(14, "ATR周期")
+atrMult  = input.float(1.5, "ATR倍数", step=0.1)
 
-n = input(title='period', defval=100)
+// ===== 基础指标 =====
+ma       = ta.sma(close, len)
+atr      = ta.atr(atrLen)
 
-n2ma = 2 * ta.wma(close, math.round(n / 2))
-nma = ta.wma(close, n)
-diff = n2ma - nma
-sqn = math.round(math.sqrt(n))
+// ===== 多均线 =====
+sma20  = ta.sma(close, 20)
+sma60  = ta.sma(close, 60)
+sma120 = ta.sma(close, 120)
 
-n2ma1 = 2 * ta.wma(close[1], math.round(n / 2))
-nma1 = ta.wma(close[1], n)
-diff1 = n2ma1 - nma1
-sqn1 = math.round(math.sqrt(n))
+ema20  = ta.ema(close, 20)
+ema60  = ta.ema(close, 60)
+ema120 = ta.ema(close, 120)
 
-n1 = ta.wma(diff, sqn)
-n2 = ta.wma(diff1, sqn)
-c = n1 > n2 ? color.green : color.red
-ma = plot(n1, color=c)
+// 双曲线通道 (均线 ± K×ATR)
+upper    = ma + k * atr
+lower    = ma - k * atr
 
+// ===== 交易逻辑 =====
+// 下轨开多
+longCond  = ta.crossunder(close, lower)
+// 上轨开空
+shortCond = ta.crossover(close, upper)
 
+// ===== 均线密集交叉检测 =====
+// 均线距离很近 (使用较宽松的条件以便更容易产生信号)
+ma_dense = math.abs(sma20 - sma60) < atr * 0.05 and math.abs(sma60 - sma120) < atr * 0.05 and math.abs(sma20 - sma120) < atr * 0.05
+// 均线交叉（20与60、60与120都发生交叉）
+cross_20_60 = ta.cross(sma20, sma60)
+cross_60_120 = ta.cross(sma60, sma120)
+ma_cross = cross_20_60 or cross_60_120
 
-// RSi and Moving averages
+// 交叉点价格
+cross_price = (sma20 + sma60 + sma120) / 3
 
-length = input(14)
-overSold = input(80)
-overBought = input(20)
-point = 0.0001
-dev = 2
+// 波峰/波谷检测
+peak = ta.highest(high, 5) == high
+trough = ta.lowest(low, 5) == low
 
-fastLength = input(50)
-fastLengthL = input(50)
-slowLength = input(100)
-slowLengthL = input(100)
-price = close
+// 波峰在交叉点上方做多
+long_cross = ma_dense and ma_cross and peak and high > cross_price
+// 波谷在交叉点下方做空
+short_cross = ma_dense and ma_cross and trough and low < cross_price
 
-mafast = ta.ema(price, fastLength)
-mafastL = ta.ema(price, fastLengthL)
-maslow = ta.ema(price, slowLength)
-maslowL = ta.ema(price, slowLengthL)
-vrsi = ta.rsi(price, length)
-cShort = ta.crossunder(vrsi, overBought)
+// ===== 策略2的均线密集交叉检测 =====
+// 更全面的均线密集条件：至少4根均线重合才算密集 (使用较宽松的条件以便更容易产生信号)
+// 判断任意4条均线是否密集（距离小于ATR的5%）
+ma_dense_4lines = false
 
-condDown = n2 >= n1
-condUp = condDown != true
-closeLong = ta.crossover(vrsi, overSold)
-closeShort = cShort
+// 检查所有可能的4线组合
+// 组合1: sma20, sma60, sma120, ema20
+cond1 = math.abs(sma20 - sma60) < atr * 0.05 and math.abs(sma60 - sma120) < atr * 0.05 and math.abs(sma120 - ema20) < atr * 0.05 and math.abs(sma20 - ema20) < atr * 0.05
 
+// 组合2: sma20, sma60, sma120, ema60
+cond2 = math.abs(sma20 - sma60) < atr * 0.05 and math.abs(sma60 - sma120) < atr * 0.05 and math.abs(sma120 - ema60) < atr * 0.05 and math.abs(sma20 - ema60) < atr * 0.05
 
-// Supertrend Parameters
-st_periods = input.int(title="ATR Period (Supertrend)", defval=10, group="Supertrend")
-st_src = input.source(hl2, title="Source (Supertrend)", group="Supertrend")
-st_multiplier = input.float(title="ATR Multiplier (Supertrend)", step=0.1, defval=3.0, group="Supertrend")
-st_changeATR = input.bool(title="Change ATR Calculation Method? (Supertrend)", defval=true, group="Supertrend")
+// 组合3: sma20, sma60, sma120, ema120
+cond3 = math.abs(sma20 - sma60) < atr * 0.05 and math.abs(sma60 - sma120) < atr * 0.05 and math.abs(sma120 - ema120) < atr * 0.05 and math.abs(sma20 - ema120) < atr * 0.05
 
-st_atr2 = ta.sma(ta.tr, st_periods)
-st_atr = st_changeATR ? ta.atr(st_periods) : st_atr2
-st_up = st_src - (st_multiplier * st_atr)
-st_up1 = nz(st_up[1], st_up)
-st_up := close[1] > st_up1 ? math.max(st_up, st_up1) : st_up
-st_dn = st_src + (st_multiplier * st_atr)
-st_dn1 = nz(st_dn[1], st_dn)
-st_dn := close[1] < st_dn1 ? math.min(st_dn, st_dn1) : st_dn
-st_trend = 1
-st_trend := nz(st_trend[1], st_trend)
-st_trend := st_trend == -1 and close > st_dn1 ? 1 : st_trend == 1 and close < st_up1 ? -1 : st_trend
-st_buySignal = st_trend == 1 and st_trend[1] == -1
-st_sellSignal = st_trend == -1 and st_trend[1] == 1
+// 组合4: sma20, sma60, ema20, ema60
+cond4 = math.abs(sma20 - sma60) < atr * 0.05 and math.abs(sma60 - ema20) < atr * 0.05 and math.abs(ema20 - ema60) < atr * 0.05 and math.abs(sma20 - ema60) < atr * 0.05
 
-// Strategy Logic
-longCondition = n1 > n2
-shortCondition = longCondition != true
+// 组合5: sma20, sma60, ema20, ema120
+cond5 = math.abs(sma20 - sma60) < atr * 0.05 and math.abs(sma60 - ema20) < atr * 0.05 and math.abs(ema20 - ema120) < atr * 0.05 and math.abs(sma20 - ema120) < atr * 0.05
 
-// === 记录1号策略最近一次信号类型 ===
-var int last_signal = na  // 1=long, -1=short, na=none
+// 组合6: sma20, sma60, ema60, ema120
+cond6 = math.abs(sma20 - sma60) < atr * 0.05 and math.abs(sma60 - ema60) < atr * 0.05 and math.abs(ema60 - ema120) < atr * 0.05 and math.abs(sma20 - ema120) < atr * 0.05
 
-// === 1号策略建仓逻辑（不依赖Supertrend信号）===
-if not na(vrsi)
-    if shortCondition
-        if price[0] < maslow[0] and price[1] > mafast[1]
-            strategy.entry('SYS-SHORT', strategy.short, comment='short')
-            last_signal := -1
-    if longCondition
-        if price[0] < mafast[0] and price[1] > mafast[1]
-            strategy.entry('SYS-LONG', strategy.long, comment='long')
-            last_signal := 1
+// 组合7: sma20, sma120, ema20, ema60
+cond7 = math.abs(sma20 - sma120) < atr * 0.05 and math.abs(sma120 - ema20) < atr * 0.05 and math.abs(ema20 - ema60) < atr * 0.05 and math.abs(sma20 - ema60) < atr * 0.05
 
-// === 2号策略出现卖信号时，若1号策略当前持有多单，则平多仓 ===
-if st_sellSignal
-    if strategy.position_size > 0 and last_signal == 1
-        strategy.close('SYS-LONG', comment='Supertrend Sell Close')
+// 组合8: sma20, sma120, ema20, ema120
+cond8 = math.abs(sma20 - sma120) < atr * 0.05 and math.abs(sma120 - ema20) < atr * 0.05 and math.abs(ema20 - ema120) < atr * 0.05 and math.abs(sma20 - ema120) < atr * 0.05
 
-// === 2号策略出现买信号时，若1号策略当前持有空单，则平空仓 ===
-if st_buySignal
-    if strategy.position_size < 0 and last_signal == -1
-        strategy.close('SYS-SHORT', comment='Supertrend Buy Close')
+// 组合9: sma20, sma120, ema60, ema120
+cond9 = math.abs(sma20 - sma120) < atr * 0.05 and math.abs(sma120 - ema60) < atr * 0.05 and math.abs(ema60 - ema120) < atr * 0.05 and math.abs(sma20 - ema120) < atr * 0.05
 
-// === 1号策略原有平仓逻辑（可保留或按需调整）===
-strategy.close('SYS-SHORT', when=ta.crossunder(vrsi, overBought))
-strategy.close('SYS-LONG', when=ta.crossover(vrsi, overSold))
+// 组合10: sma60, sma120, ema20, ema60
+cond10 = math.abs(sma60 - sma120) < atr * 0.05 and math.abs(sma120 - ema20) < atr * 0.05 and math.abs(ema20 - ema60) < atr * 0.05 and math.abs(sma60 - ema60) < atr * 0.05
 
+// 组合11: sma60, sma120, ema20, ema120
+cond11 = math.abs(sma60 - sma120) < atr * 0.05 and math.abs(sma120 - ema20) < atr * 0.05 and math.abs(ema20 - ema120) < atr * 0.05 and math.abs(sma60 - ema120) < atr * 0.05
 
-// Stop Loss 
+// 组合12: sma60, sma120, ema60, ema120
+cond12 = math.abs(sma60 - sma120) < atr * 0.05 and math.abs(sma120 - ema60) < atr * 0.05 and math.abs(ema60 - ema120) < atr * 0.05 and math.abs(sma60 - ema120) < atr * 0.05
 
+// 如果任意一组4线密集，则认为满足条件
+ma_dense_comprehensive = cond1 or cond2 or cond3 or cond4 or cond5 or cond6 or cond7 or cond8 or cond9 or cond10 or cond11 or cond12
 
-sl = input(75)
-Stop = sl * 10
+// 检测sma20和ema20穿透其他均线的交叉信号
+sma20_cross = ta.cross(sma20, sma60) or ta.cross(sma20, sma120) or ta.cross(sma20, ema60) or ta.cross(sma20, ema120)
+ema20_cross = ta.cross(ema20, sma60) or ta.cross(ema20, sma120) or ta.cross(ema20, ema60) or ta.cross(ema20, ema120)
 
+// 只有当均线密集且sma20或ema20穿透其他均线时才算有效交叉
+valid_cross = ma_dense_comprehensive and (sma20_cross or ema20_cross)
 
+// ===== 新增：在密集交叉线上方的波谷做多，下方的波峰做空 =====
+// 在密集交叉线上方的波谷做多
+long_on_dense_trough = valid_cross[1] and trough and low > ta.highest(high, 5)[1]
+// 在密集交叉线下方的波峰做空
+short_on_dense_peak = valid_cross[1] and peak and high < ta.lowest(low, 5)[1]
 
-strategy.exit('Out Long', 'SYS-LONG', loss=Stop)
-strategy.exit('Out Short', 'SYS-SHORT', loss=Stop)
+// ===== 策略执行 =====
+// 只保留密集交叉线上方的波谷做多和下方的波峰做空
+if long_on_dense_trough
+    strategy.entry("LongOnDenseTrough", strategy.long)
+if short_on_dense_peak
+    strategy.entry("ShortOnDensePeak", strategy.short)
 
+// ===== 图形标注 =====
+// 波峰标注（红色三角，中文）- 使用新的密集判断条件
+plotshape(ma_dense_comprehensive and (sma20_cross or ema20_cross) and peak, title="波峰", style=shape.triangleup, location=location.abovebar, color=color.red, size=size.small, offset=0, text="波峰")
+// 波谷标注（绿色三角，中文）- 使用新的密集判断条件
+plotshape(ma_dense_comprehensive and (sma20_cross or ema20_cross) and trough, title="波谷", style=shape.triangledown, location=location.belowbar, color=color.green, size=size.small, offset=0, text="波谷")
+// 多信号标注（蓝色向上箭头，中文）
+plotshape(long_on_dense_trough, title="多", style=shape.arrowup, location=location.belowbar, color=color.blue, size=size.normal, offset=0, text="多")
+// 空信号标注（紫色向下箭头，中文）
+plotshape(short_on_dense_peak, title="空", style=shape.arrowdown, location=location.abovebar, color=color.purple, size=size.normal, offset=0, text="空")
 
+// ===== 均线交叉点标注 =====
+// sma20与sma60交叉点
+plotshape(cross_20_60, title="交叉20-60", style=shape.xcross, location=location.top, color=color.orange, size=size.tiny, offset=0, text="交叉")
+// sma60与sma120交叉点
+plotshape(cross_60_120, title="交叉60-120", style=shape.xcross, location=location.top, color=color.fuchsia, size=size.tiny, offset=0, text="交叉")
 
-//plot(strategy.equity, title="equity", color=red, linewidth=2, style=areabr)
+// ===== 策略2的密集交叉标注 =====
+// 在图表上标记有效的交叉点
+plotshape(valid_cross, title="有效交叉", style=shape.circle, location=location.abovebar, color=color.red, size=size.small)
 
-strategy.exit('Out Long', 'SYS-LONG', loss=Stop)
-strategy.exit('Out Short', 'SYS-SHORT', loss=Stop)
+// ===== 新增：密集交叉线上方的波谷和下方的波峰标注 =====
+plotshape(long_on_dense_trough, title="密集交叉后波谷多", style=shape.arrowup, location=location.belowbar, color=color.lime, size=size.normal)
+plotshape(short_on_dense_peak, title="密集交叉后波峰空", style=shape.arrowdown, location=location.abovebar, color=color.fuchsia, size=size.normal)
 
+// ===== 绘图 =====
+plot(ma, color=color.yellow, title="均线")
+plot(upper, color=color.red, title="上轨")
+plot(lower, color=color.green, title="下轨")
 
-
-//plot(strategy.equity, title="equity", color=red, linewidth=2, style=areabr)
-
-// === 标注多单、空单开仓和平仓 ===
-var float long_entry_price = na
-var float short_entry_price = na
-
-// 多单开仓标记
-long_entry = not na(vrsi) and longCondition and price[0] < mafast[0] and price[1] > mafast[1]
-if long_entry
-    long_entry_price := close
-plotshape(long_entry, title="Long Entry", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.small, offset=0, text="多开")
-
-// 空单开仓标记
-short_entry = not na(vrsi) and shortCondition and price[0] < maslow[0] and price[1] > mafast[1]
-if short_entry
-    short_entry_price := close
-plotshape(short_entry, title="Short Entry", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.small, offset=0, text="空开")
-
-// 多单平仓标记（Supertrend或RSI平仓）
-long_exit = ((st_sellSignal and strategy.position_size > 0 and last_signal == 1) or ta.crossover(vrsi, overSold))
-plotshape(long_exit, title="Long Exit", location=location.abovebar, color=color.green, style=shape.xcross, size=size.tiny, offset=0, text="多平")
-
-// 空单平仓标记（Supertrend或RSI平仓）
-short_exit = ((st_buySignal and strategy.position_size < 0 and last_signal == -1) or ta.crossunder(vrsi, overBought))
-plotshape(short_exit, title="Short Exit", location=location.belowbar, color=color.red, style=shape.xcross, size=size.tiny, offset=0, text="空平")
-
+// 绘制EMA均线
+plot(ema20, color=color.new(color.black, 50), title="EMA20")
+plot(ema60, color=color.new(color.blue, 50), title="EMA60")
+plot(ema120, color=color.new(color.purple, 50), title="EMA120")
