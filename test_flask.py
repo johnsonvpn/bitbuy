@@ -143,6 +143,7 @@ def place_order(side: str, price: float, size: float, stop_loss: float = None, t
         trade = Trade.TradeAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
         pos_side = "long" if side == "buy" else "short"
         order_id = str(uuid.uuid4())
+        logging.info(f"尝试下单: {side.upper()}, 价格: {price}, 数量: {size}, 订单ID: {order_id}")
         order = trade.place_order(
             instId=SYMBOL,
             tdMode="cross",
@@ -160,13 +161,12 @@ def place_order(side: str, price: float, size: float, stop_loss: float = None, t
             send_telegram_message(msg)
             return order
         else:
-            error_msg = f"❌ 下单失败: {side.upper()}, 错误: {order.get('msg') or order['data'][0].get('sMsg')}"
+            error_msg = f"下单失败: {side.upper()}, 错误: {order.get('msg') or order['data'][0].get('sMsg')}"
             logging.error(error_msg)
             return None
     except Exception as e:
-        error_msg = f"❌ 下单失败: {side.upper()}, 错误: {e}"
+        error_msg = f"下单失败: {side.upper()}, 错误: {e}"
         logging.error(error_msg)
-        send_telegram_message(error_msg)
         return None
 
 # ============ 主程序 ============
@@ -199,10 +199,17 @@ if __name__ == "__main__":
                 elif rsi > RSI_OVERBOUGHT and prev_close > ma['MA20'] and close < ma['MA20']:
                     signal = "sell"
 
-            if in_target_range:
-                msg = f"⚠️ 价格进入目标区间 [{PRICE_ALERT - PRICE_RANGE}, {PRICE_ALERT + PRICE_RANGE}]，当前价: {price}"
-                send_telegram_message(msg)
+            # 仅在价格进入目标区间或有信号时推送状态消息
+            if in_target_range or signal:
+                msg = (
+                    f"⚠️ 状态更新: 价格: {price} | 目标区间: [{PRICE_ALERT - PRICE_RANGE}, {PRICE_ALERT + PRICE_RANGE}]\n"
+                    f"交易量: {volume} 合约 | 振幅: {amplitude_percent:.2f}%\n"
+                    f"RSI: {rsi_str} | MA20: {ma20_str}\n"
+                    f"位置: {position} | 信号: {signal or '无'}"
+                )
                 logging.info(msg)
+                print(msg)
+                send_telegram_message(msg)
 
             if AUTO_TRADE_ENABLED and signal and signal != last_signal:
                 if signal == "buy" and current_position != "long":
@@ -244,23 +251,6 @@ if __name__ == "__main__":
                     if order:
                         send_telegram_message(f"🎯 止盈买入: 价格={price}")
                         current_position = None
-
-            # 输出当前状态
-            msg = (
-                f"当前价格: {price}\n"
-                f"交易量: {volume} 合约\n"
-                f"上影线: {upper_shadow}\n"
-                f"下影线: {lower_shadow}\n"
-                f"振幅: {amplitude_percent:.2f}%\n"
-                f"RSI: {rsi_str}\n"
-                f"MA20: {ma20_str}\n"
-                f"位置: {position}\n"
-                f"当前持仓: {current_position or '无'}\n"
-                f"信号: {signal or '无'}"
-            )
-            logging.info(msg)
-            print(msg)
-            send_telegram_message(msg)
 
             # 动态调整检查频率
             if PRICE_ALERT - 1000 <= price <= PRICE_ALERT + 1000:
