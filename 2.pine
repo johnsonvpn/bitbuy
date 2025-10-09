@@ -21,6 +21,28 @@ plot(ema60,  color=color.new(color.blue, 50),  title="EMA60")
 plot(sma120, color=color.purple,               title="SMA120")
 plot(ema120, color=color.new(color.purple, 50),title="EMA120")
 
+// —— 均线密集交叉检测
+// 计算ATR用于判断均线是否密集
+atr = ta.atr(14)
+
+// 均线密集条件：均线之间的距离小于ATR的一定比例
+ma_dense = math.abs(sma20 - sma60) < atr * 0.03 and 
+           math.abs(sma60 - sma120) < atr * 0.03 and 
+           math.abs(sma20 - sma120) < atr * 0.03 and
+           math.abs(ema20 - ema60) < atr * 0.03 and 
+           math.abs(ema60 - ema120) < atr * 0.03 and 
+           math.abs(ema20 - ema120) < atr * 0.03
+
+// 检测sma20和ema20穿透其他均线的交叉信号
+sma20_cross = ta.cross(sma20, sma60) or ta.cross(sma20, sma120) or ta.cross(sma20, ema60) or ta.cross(sma20, ema120)
+ema20_cross = ta.cross(ema20, sma60) or ta.cross(ema20, sma120) or ta.cross(ema20, ema60) or ta.cross(ema20, ema120)
+
+// 只有当均线密集且sma20或ema20穿透其他均线时才算有效交叉
+valid_cross = ma_dense and (sma20_cross or ema20_cross)
+
+// 在图表上标记有效的交叉点
+plotshape(valid_cross, title="有效交叉", style=shape.circle, location=location.abovebar, color=color.red, size=size.small)
+
 // —— 圆点定位
 cond    = barstate.islast
 bl      = low
