@@ -1,5 +1,3 @@
-
-
 import time
 import requests
 import logging
@@ -8,8 +6,8 @@ from okx import MarketData, Trade
 # ============ 配置区域 ============
 
 # Telegram Bot 配置
-BOT_TOKEN = "8239027160:AAGllh-w2_4mCI3B1oEPfQHgBeOiD6Zt3Z"
-CHAT_ID = 8024914575  # 请替换为你的 Telegram Chat ID
+BOT_TOKEN = "8239027160:AAGllh-w2_4mCI3B1oEPfQHgBeOiD6Zt3ZU"
+CHAT_ID = "8024914547"  # 请替换为你的 Telegram Chat ID
 
 # OKX API 配置
 API_KEY = "c5788dfe-8ef0-4a07-812b-15c4c8f890b0"
@@ -20,11 +18,11 @@ IS_DEMO = True  # True=模拟盘，False=实盘
 AUTO_TRADE_ENABLED = True  # True=自动下单，False=仅发送提醒
 
 SYMBOL = "BTC-USDT-SWAP"  # 永续合约
-PRICE_ALERT = 121831.0 # 目标价格
+PRICE_ALERT = 121237.6  # 目标价格
 PRICE_RANGE = 50  # 触发范围 (±500 USDT)
 CHECK_INTERVAL = 5  # 正常检查间隔（秒）
 COOLDOWN = 50  # 触发后的冷却时间（秒）
-ORDER_SIZE = 10 # 下单数量
+ORDER_SIZE = 0.1  # 下单数量
 
 # 配置日志
 logging.basicConfig(
@@ -60,23 +58,39 @@ def get_latest_price(symbol: str) -> float:
     raise Exception("无法获取价格，API 调用失败")
 
 def place_order(side: str):
-    print(f"下33333")
     """下单"""
     try:
-        print(f"下d址单: {side}")
+        print(f"下单: {side}")
         flag = "1" if IS_DEMO else "0"
         trade = Trade.TradeAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
+        # Add posSide parameter based on side
+        pos_side = "long" if side == "buy" else "short"
         order = trade.place_order(
             instId=SYMBOL,
             tdMode="cross",
             side=side,
+            posSide=pos_side,  # Specify posSide for long/short position
             ordType="market",
             sz=str(ORDER_SIZE)
         )
-        print(f"下单成功: {side}, 数量: {ORDER_SIZE}, 订单详情: {order}")
-        return order
+        # Check if the order was successful
+        if order.get("code") == "0" and order.get("data") and order["data"][0].get("sCode") == "0":
+            msg = f"✅ 下单成功: {side}, 数量: {ORDER_SIZE}, 订单详情: {order}"
+            print(msg)
+            logging.info(msg)
+            send_telegram_message(msg)
+            return order
+        else:
+            error_msg = f"❌ 下单失败: {side}, 错误: {order.get('msg') or order['data'][0].get('sMsg')}"
+            print(error_msg)
+            logging.error(error_msg)
+            send_telegram_message(error_msg)
+            raise Exception(error_msg)
     except Exception as e:
-        print(f"下单失败: {e}")
+        error_msg = f"❌ 下单失败: {e}"
+        print(error_msg)
+        logging.error(error_msg)
+        send_telegram_message(error_msg)
         raise
 
 # ============ 主程序 ============
@@ -98,9 +112,13 @@ if __name__ == "__main__":
                 logging.info(msg)
 
                 if AUTO_TRADE_ENABLED:
-                    print(f"进入buytrading: {price}")
-                    order = place_order("buy")
-                    send_telegram_message(f"✅ 已执行市价买单: {order}")
+                    print(f"进入交易: {price}")
+                    send_telegram_message("🚀 开始下单...")
+                    try:
+                        order = place_order("buy")
+                    except Exception as e:
+                        # Exception is already logged and notified in place_order
+                        pass
                 else:
                     send_telegram_message("💤 下单功能未开启，仅发送提醒。")
 
