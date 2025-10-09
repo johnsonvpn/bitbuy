@@ -1,0 +1,672 @@
+2025-10-09 14:33:17,653 - INFO - 🚀 启动 OKX WebSocket 监控系统...
+2025-10-09 14:33:18,533 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:18,682 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:19,481 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:19,481 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:19,481 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:20,318 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:20,416 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:21,240 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:21,241 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:21,241 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:22,070 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:22,164 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:22,952 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:22,952 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:22,952 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:23,802 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:23,898 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:24,688 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:24,688 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:24,688 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:25,479 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:25,576 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:26,369 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:26,370 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:26,370 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:27,196 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:27,292 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:28,116 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:28,116 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:28,116 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:28,934 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:29,025 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:29,850 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:29,850 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:29,850 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:30,687 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:30,781 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:31,579 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:31,579 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:31,579 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:32,417 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:32,509 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:33,338 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:33,338 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:33,338 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:34,130 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:34,278 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:35,088 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:35,088 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:35,088 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:35,882 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:35,980 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:36,830 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:36,830 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:36,830 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:37,677 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:37,774 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:38,630 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:38,630 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:38,630 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:39,479 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:39,599 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:40,452 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:40,452 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:40,452 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:41,297 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:41,398 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:42,199 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:42,200 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:42,200 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:43,042 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:43,153 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:43,996 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:43,996 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:43,996 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:44,840 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:44,944 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:45,785 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:45,786 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:45,786 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:46,626 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:46,770 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:47,603 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:47,603 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:47,603 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:48,442 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:48,545 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:49,340 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:49,340 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:49,340 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:50,131 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:50,226 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:51,081 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:51,082 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:51,082 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:51,230 - INFO - tearing down on exception 
+2025-10-09 14:33:51,332 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:52,190 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:52,208 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:52,208 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:53,047 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:53,160 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:53,953 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:53,953 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:53,953 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:54,748 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:54,879 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:55,717 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:55,718 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:33:55,718 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:33:56,534 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:33:56,670 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:33:56,734 - INFO - tearing down on exception 
+2025-10-09 14:33:56,734 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:34:58,248 - INFO - 🚀 启动 OKX WebSocket 监控系统...
+2025-10-09 14:34:59,142 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:34:59,296 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:00,122 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:00,122 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:00,122 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:00,948 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:01,054 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:01,873 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:01,873 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:01,873 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:02,708 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:02,817 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:03,648 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:03,648 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:03,648 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:04,450 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:04,548 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:05,672 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:05,672 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:05,672 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:06,476 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:06,583 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:07,368 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:07,368 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:07,368 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:08,203 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:08,304 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:09,159 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:09,159 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:09,159 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:09,953 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:10,069 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:10,876 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:10,876 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:10,876 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:11,720 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:11,821 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:12,629 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:12,629 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:12,629 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:13,416 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:13,533 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:14,319 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:14,319 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:14,319 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:15,129 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:15,226 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:16,009 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:16,009 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:16,009 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:16,842 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:16,944 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:17,804 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:17,804 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:17,804 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:18,640 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:18,790 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:19,631 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:19,631 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:19,631 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:20,472 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:20,599 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:21,455 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:21,455 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:21,455 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:22,302 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:22,402 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:23,271 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:23,271 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:23,271 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:24,174 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:24,271 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:25,067 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:25,067 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:25,067 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:25,881 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:25,979 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:26,792 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:26,792 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:26,792 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:27,627 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:27,727 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:28,532 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:28,532 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:28,532 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:29,357 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:29,447 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:30,242 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:30,243 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:30,243 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:31,077 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:31,174 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:32,005 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:32,006 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:32,006 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:32,803 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:32,900 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:33,686 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:33,687 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:33,687 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:34,526 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:34,623 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:35,423 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:35,424 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:35,424 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:36,545 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:36,651 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:37,460 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:37,461 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:37,461 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:38,300 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:38,504 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:39,301 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:39,301 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:39,301 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:40,132 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:40,228 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:41,048 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:41,048 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:41,048 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:41,845 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:41,949 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:42,745 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:42,745 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:42,745 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:43,581 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:43,678 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:44,507 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:44,507 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:44,507 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:45,309 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:45,404 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:46,245 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:46,245 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:46,245 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:47,119 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:47,217 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:48,052 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:48,052 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:48,052 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:48,875 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:48,983 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:50,074 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:50,074 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:50,074 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:51,036 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:51,141 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:51,933 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:51,933 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:51,933 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:52,776 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:52,871 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:53,922 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:53,922 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:53,922 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:54,725 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:54,827 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:55,677 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:55,677 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:55,677 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:56,485 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:56,583 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:57,624 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:57,624 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:57,624 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:35:58,429 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:58,584 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:35:59,382 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:35:59,382 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:35:59,382 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:00,169 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:00,266 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:01,094 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:01,094 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:01,094 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:01,949 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:02,049 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:02,903 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:02,903 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:02,903 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:03,739 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:03,836 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:04,626 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:04,627 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:04,627 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:05,469 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:05,570 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:06,359 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:06,359 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:06,359 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:07,425 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:07,524 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:08,333 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:08,333 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:08,333 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:09,148 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:09,252 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:10,373 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:10,373 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:10,373 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:11,299 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:11,396 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:12,272 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:12,272 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:12,272 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:13,123 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:13,244 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:14,105 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:14,105 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:14,105 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:14,922 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:15,055 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:15,931 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:15,931 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:15,931 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:16,737 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:16,832 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:17,674 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:17,674 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:17,674 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:18,548 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:18,671 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:19,469 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:19,470 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:19,470 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:20,308 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:20,479 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:21,350 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:21,350 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:21,350 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:22,154 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:22,250 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:23,049 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:23,049 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:23,049 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:23,847 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:23,948 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:24,798 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:24,799 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:24,799 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:25,602 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:25,705 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:26,540 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:26,540 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:26,540 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:27,395 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:27,505 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:28,305 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:28,305 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:28,305 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:29,102 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:29,203 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:29,999 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:29,999 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:29,999 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:30,829 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:30,937 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:31,802 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:31,802 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:31,802 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:32,830 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:32,934 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:33,732 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:33,732 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:33,732 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:34,533 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:34,628 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:35,534 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:35,534 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:35,535 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:36,689 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:36,783 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:37,736 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:37,736 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:37,737 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:38,537 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:38,636 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:39,455 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:39,456 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:39,456 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:40,294 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:40,394 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:41,221 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:41,221 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:41,221 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:42,003 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:42,098 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:42,884 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:42,884 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:42,884 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:43,725 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:43,828 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:44,632 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:44,632 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:44,632 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:45,506 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:45,604 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:46,403 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:46,404 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:46,404 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:47,241 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:47,361 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:48,179 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:48,180 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:48,180 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:49,021 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:49,121 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:49,923 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:49,923 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:49,924 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:50,770 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:50,872 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:51,722 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:51,722 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:51,722 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:52,554 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:52,672 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:53,468 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:53,469 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:53,469 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:54,278 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:54,378 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:55,213 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:55,213 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:55,214 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:56,078 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:56,176 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:57,019 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:57,019 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:57,019 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:57,847 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:57,951 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:36:58,770 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:58,770 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:36:58,770 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:36:59,612 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:36:59,708 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:00,504 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:00,504 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:00,504 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:01,343 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:01,446 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:02,306 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:02,307 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:02,307 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:03,149 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:03,252 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:04,056 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:04,056 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:04,057 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:04,863 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:04,973 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:05,833 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:05,834 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:05,834 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:06,677 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:06,771 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:07,616 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:07,617 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:07,617 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:08,428 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:08,582 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:09,385 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:09,385 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:09,385 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:10,202 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:10,302 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:11,138 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:11,139 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:11,140 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:11,985 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:12,103 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:12,942 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:12,942 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:12,942 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:13,780 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:13,874 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:14,702 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:14,702 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:14,702 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:15,599 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:15,697 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:16,528 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:16,529 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:16,529 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:17,323 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:17,433 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:18,234 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:18,235 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:18,235 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:19,034 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:19,136 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:19,987 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:19,987 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:19,987 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:20,860 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:20,984 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:21,841 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:21,841 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:21,841 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:22,627 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:22,728 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:23,712 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:23,713 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:23,713 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:24,509 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:24,603 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:25,387 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:25,387 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:25,388 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:26,230 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:26,380 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:27,241 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:27,242 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:27,242 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:28,030 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:28,271 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:29,070 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:29,070 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:29,070 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:29,902 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:29,999 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:30,822 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:30,822 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:30,822 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:31,734 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:31,829 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:31,930 - INFO - tearing down on exception 
+2025-10-09 14:37:31,930 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:32,768 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:32,871 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:33,903 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:33,903 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:33,904 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:34,700 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:34,796 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:35,388 - INFO - tearing down on exception 
+2025-10-09 14:37:35,388 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:36,218 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:36,319 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:37,150 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:37,151 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:37:37,151 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:37:37,974 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:37:38,074 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:37:38,665 - INFO - tearing down on exception 
+2025-10-09 14:37:38,666 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:18,262 - INFO - 🚀 启动 OKX WebSocket 监控系统...
+2025-10-09 14:39:19,143 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:19,337 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:20,133 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:20,134 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:20,134 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:20,979 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:21,075 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:21,924 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:21,925 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:21,925 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:22,718 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:22,823 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:23,620 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:23,620 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:23,620 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:24,487 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:24,586 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:25,373 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:25,373 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:25,373 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:26,224 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:26,388 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:27,212 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:27,212 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:27,213 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:28,280 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:28,380 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:29,180 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:29,180 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:29,181 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:29,998 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:30,099 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:30,933 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:30,934 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:30,934 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:32,008 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:32,128 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:33,010 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:33,010 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:33,010 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:33,853 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:33,956 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:34,832 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:34,833 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:34,833 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:35,702 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:35,833 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:36,679 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:36,679 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:36,679 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:37,558 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:37,659 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:38,509 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:38,509 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:38,509 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:39,363 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:39,475 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:40,310 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:40,310 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:40,310 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:41,103 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:41,207 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:42,062 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:42,062 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:42,062 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:42,876 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:42,980 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:43,771 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:43,771 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:43,771 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:44,561 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:44,656 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:45,489 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:45,490 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:45,490 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:46,486 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:46,584 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:47,431 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:47,431 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:47,431 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:48,233 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:48,337 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:49,136 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:49,136 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:49,136 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:50,002 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:50,099 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:50,901 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:50,901 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:50,901 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:51,732 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:51,826 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:52,659 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:52,659 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:52,659 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:53,479 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:53,580 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:54,383 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:54,383 - ERROR - [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002) - goodbye
+2025-10-09 14:39:54,383 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:55,225 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:55,323 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:55,468 - INFO - tearing down on exception 
+2025-10-09 14:39:55,468 - INFO - WebSocket 连接关闭: None, None
+2025-10-09 14:39:56,274 - ERROR - Telegram 消息发送失败: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2025-10-09 14:39:56,372 - ERROR - WebSocket 错误: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1002)
+2025-10-09 14:39:57,132 - INFO - tearing down on exception 
+2025-10-09 14:39:57,133 - INFO - WebSocket 连接关闭: None, None
