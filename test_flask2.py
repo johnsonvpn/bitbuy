@@ -13,7 +13,7 @@ CHAT_ID = 8024914547  # 请替换为你的 Telegram Chat ID
 # OKX API 配置
 IS_DEMO = True  # True=模拟盘，False=实盘
 SYMBOL = "BTC-USDT"  # 现货符号
-CHECK_INTERVAL = 10  # 检查间隔（秒）
+CHECK_INTERVAL = 60  # 检查间隔（秒）
 BAR = "1m"  # K线时间框架（1分钟）
 RSI_PERIOD = 14  # RSI 计算周期
 MA_PERIODS = [20, 60, 120]  # MA 和 EMA 周期
@@ -186,7 +186,7 @@ if __name__ == "__main__":
             )
             logging.info(msg)
             print(msg)
-            send_telegram_message(msg)
+            # send_telegram_message(msg)
             time.sleep(CHECK_INTERVAL)
         except Exception as e:
             logging.error(f"程序错误: {str(e)}")
