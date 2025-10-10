@@ -4,7 +4,7 @@ import logging
 import pandas as pd
 from okx import MarketData, Trade
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # ============ 配置区域 ============
 
@@ -19,7 +19,7 @@ PASS_PHRASE = "gamewell810DO*"
 
 IS_DEMO = True  # True=模拟盘，False=实盘
 AUTO_TRADE_ENABLED = True  # True=自动下单，False=仅发送提醒
-TEST_MODE = False      # True=测试模式，不需要满足其他条件就可以下单
+TEST_MODE = True      # True=测试模式，不需要满足其他条件就可以下单
 SYMBOL = "BTC-USDT-SWAP"  # 永续合约
 CHECK_INTERVAL = 5  # 正常检查间隔（秒）
 COOLDOWN = 50  # 触发后的冷却时间（秒）
@@ -239,6 +239,16 @@ if __name__ == "__main__":
             
             # 判断是否为新K线结束（通过时间戳检查）
             current_ts = int(time.time() // 60 * 60)  # 当前分钟开始时间戳
+            # 转换为北京时间 (UTC+8)
+            beijing_tz = timezone(timedelta(hours=8))
+            
+            # 将时间戳转换为UTC时间，然后转换为北京时间
+            last_candle_utc = datetime.fromtimestamp(last_candle_ts, tz=timezone.utc) if last_candle_ts > 0 else None
+            last_candle_time_str = last_candle_utc.astimezone(beijing_tz).strftime('%Y-%m-%d %H:%M:%S') if last_candle_utc else "N/A"
+            
+            current_utc = datetime.fromtimestamp(current_ts, tz=timezone.utc)
+            current_time_str = current_utc.astimezone(beijing_tz).strftime('%Y-%m-%d %H:%M:%S')
+            
             if current_ts > last_candle_ts:
                 last_candle_ts = current_ts
                 # K线结束时判断，使用当前K线数据
@@ -276,7 +286,7 @@ if __name__ == "__main__":
 
             # 检查价格是否在目标范围内（额外过滤）
             in_target_range = True  # 去除目标价格判断
-            print(f"K线结束: {close}, signal={signal},last_signal={last_signal},当前持仓={current_position}, 目标范围内={in_target_range}, RSI={rsi_str}, MA20={ma20_str}, 成交量={volume} (平均: {avg_volume}),{AUTO_TRADE_ENABLED and signal and signal != last_signal and in_target_range}")
+            print(f"K线结束: {close}, signal={signal},last_signal={last_signal},当前持仓={current_position}, 目标范围内={in_target_range}, RSI={rsi_str}, MA20={ma20_str}, 成交量={volume} (平均: {avg_volume}), 上一根K线时间={last_candle_time_str}, 当前时间={current_time_str}, {AUTO_TRADE_ENABLED and signal and signal != last_signal and in_target_range}")
             
             # 在测试模式下，不需要满足其他条件就可以下单
             if TEST_MODE and AUTO_TRADE_ENABLED and in_target_range:
