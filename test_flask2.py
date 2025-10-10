@@ -32,6 +32,8 @@ RSI_OVERBOUGHT = 70  # RSI 超买阈值
 RSI_OVERSOLD = 30    # RSI 超卖阈值
 STOP_LOSS_PERCENT = 0.02  # 止损百分比 (2%)
 TAKE_PROFIT_PERCENT = 0.04  # 止盈百分比 (4%)
+MIN_AMPLITUDE_PERCENT = 2.0  # 最小振幅百分比
+MIN_SHADOW_RATIO = 1.0  # 影线长度与实体长度的最小比例
 
 # 配置日志
 logging.basicConfig(
@@ -151,7 +153,7 @@ def get_latest_price_and_indicators(symbol: str) -> tuple:
                 )
                 
                 logging.info(log_msg)
-                return price, volume, upper_shadow, lower_shadow, amplitude_percent, rsi, ma, ema, position, close, prev_close, avg_volume
+                return price, volume, upper_shadow, lower_shadow, amplitude_percent, rsi, ma, ema, position, close, prev_close, avg_volume, open_price, high, low
             else:
                 logging.warning(f"K线 API 失败: {candles_data.get('msg')}")
                 time.sleep(2)
@@ -159,7 +161,7 @@ def get_latest_price_and_indicators(symbol: str) -> tuple:
         except Exception as e:
             logging.warning(f"获取数据失败 (尝试 {attempt + 1}/3): {e}")
             time.sleep(2)
-    return None  # 避免抛出异常，改为返回 None
+    return None
 
 def place_order(side: str, price: float, size: float, stop_loss: float = None, take_profit: float = None):
     """下单，仅在成功后推送Telegram消息"""
@@ -167,11 +169,9 @@ def place_order(side: str, price: float, size: float, stop_loss: float = None, t
         flag = "1" if IS_DEMO else "0"
         trade = Trade.TradeAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
         pos_side = "long" if side == "buy" else "short"
-        # 使用时间戳和随机数生成唯一的clOrdId，符合OKX要求
         order_id = str(int(time.time() * 1000)) + str(uuid.uuid4())[:8]
         logging.info(f"尝试下单: {side.upper()}, 价格: {price}, 数量: {size}, 订单ID: {order_id}")
         
-        # 确保数量是字符串格式且大于0
         sz = str(size)
         if float(sz) <= 0:
             error_msg = f"下单数量必须大于0，当前数量: {sz}"
@@ -185,7 +185,6 @@ def place_order(side: str, price: float, size: float, stop_loss: float = None, t
             posSide=pos_side,
             ordType="market",
             sz=sz,
-            # clOrdId=order_id
         )
         logging.info(f"API返回原始订单数据: {order}")
         if order.get("code") == "0" and order.get("data") and order["data"][0].get("sCode") == "0":
@@ -226,8 +225,6 @@ if __name__ == "__main__":
     last_candle_ts = 0  # 上一次K线时间戳
     recorded_rsi = None  # 记录的RSI值
     recorded_candle = None  # 记录的上一个K线数据，用于振幅和影线判断
-    MIN_AMPLITUDE_PERCENT = 2.0  # 最小振幅百分比
-    MIN_SHADOW_RATIO = 1.0  # 影线长度与实体长度的最小比例
 
     while True:
         try:
@@ -239,7 +236,7 @@ if __name__ == "__main__":
                 time.sleep(60)
                 continue
 
-            price, volume, upper_shadow, lower_shadow, amplitude_percent, rsi, ma, ema, position, close, prev_close, avg_volume = data
+            price, volume, upper_shadow, lower_shadow, amplitude_percent, rsi, ma, ema, position, close, prev_close, avg_volume, open_price, high, low = data
 
             # 判断是否为新K线结束
             current_ts = int(time.time() // 60 * 60)  # 当前分钟开始时间戳
