@@ -295,7 +295,7 @@ if __name__ == "__main__":
                         logging.info(msg)
                         print(msg)
                         send_telegram_message(msg)
-
+            print(f"当前时间: {current_time_str} | 上一K线时间: {last_candle_time_str} | 收盘价格: {recorded_candle['close']} | 位置: {position} | RSI: {rsi:.2f} | 信号: {signal} | 持仓: {current_position}")
             # 测试模式逻辑
             if TEST_MODE and AUTO_TRADE_ENABLED:
                 import random
