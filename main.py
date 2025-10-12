@@ -28,8 +28,9 @@ MIN_ORDER_SIZE = 0.001  # 最小下单数量
 RSI_PERIOD = 14  # RSI 计算周期
 MA_PERIODS = [20, 60, 120]  # MA 和 EMA 周期
 CANDLE_LIMIT = max(MA_PERIODS) + 10  # 多获取一些用于平均成交量
-RSI_OVERBOUGHT = 70  # RSI 超买阈值
-RSI_OVERSOLD = 30    # RSI 超卖阈值
+BAR_INTERVAL = "1m"  # K线周期，可调整: "1m", "5m", "15m", "1H", "1D" 等
+RSI_OVERBOUGHT = 80  # RSI 超买阈值
+RSI_OVERSOLD = 20    # RSI 超卖阈值
 STOP_LOSS_PERCENT = 0.02  # 止损百分比 (2%)
 TAKE_PROFIT_PERCENT = 0.04  # 止盈百分比 (4%)
 MIN_AMPLITUDE_PERCENT = 2.0  # 最小振幅百分比
@@ -109,20 +110,31 @@ def determine_position(close, ma, ema):
     else:
         return "在均线之间"
 
+def get_interval_seconds(interval: str) -> int:
+    """根据K线周期字符串返回秒数"""
+    interval_map = {
+        "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
+        "1H": 3600, "2H": 7200, "4H": 14400, "6H": 21600, "12H": 43200,
+        "1D": 86400
+    }
+    return interval_map.get(interval, 60)  # 默认1m
+
 def get_latest_price_and_indicators(symbol: str) -> tuple:
-    """获取最新价格、交易量、上下影线、振幅百分比、RSI、MA、EMA 和均线位置"""
-    for attempt in range(3):
+    """获取最新价格、交易量、上下影线、振幅百分比、RSI、MA、EMA 和均线位置，失败时持续重试"""
+    attempt = 0
+    while True:
         try:
+            attempt += 1
             flag = "1" if IS_DEMO else "0"
             market = MarketData.MarketAPI(flag=flag)
             ticker_data = market.get_ticker(instId=symbol)
             if ticker_data.get("code") != "0":
-                logging.warning(f"Ticker API 失败: {ticker_data.get('msg')}")
+                logging.warning(f"Ticker API 失败 (尝试 {attempt}): {ticker_data.get('msg')}")
                 time.sleep(2)
                 continue
             price = float(ticker_data["data"][0]["last"])
             
-            url = f"https://www.okx.com/api/v5/market/history-candles?instId={symbol}&bar=1m&limit={CANDLE_LIMIT}"
+            url = f"https://www.okx.com/api/v5/market/history-candles?instId={symbol}&bar={BAR_INTERVAL}&limit={CANDLE_LIMIT}"
             response = requests.get(url, timeout=5)
             candles_data = response.json()
             if candles_data.get("code") == "0" and candles_data.get("data"):
@@ -149,19 +161,19 @@ def get_latest_price_and_indicators(symbol: str) -> tuple:
                 log_msg = (
                     f"成功获取价格: {price}, 交易量: {volume}, 上影线: {upper_shadow}, "
                     f"下影线: {lower_shadow}, 振幅: {amplitude_percent:.2f}%, "
-                    f"RSI: {rsi_str}, MA20: {ma20_str}, 位置: {position}, 平均成交量: {avg_volume}"
+                    f"RSI: {rsi_str}, MA20: {ma20_str}, 位置: {position}, 平均成交量: {avg_volume}, K线周期: {BAR_INTERVAL}"
                 )
                 
                 logging.info(log_msg)
                 return price, volume, upper_shadow, lower_shadow, amplitude_percent, rsi, ma, ema, position, close, prev_close, avg_volume, open_price, high, low
             else:
-                logging.warning(f"K线 API 失败: {candles_data.get('msg')}")
+                logging.warning(f"K线 API 失败 (尝试 {attempt}): {candles_data.get('msg')}")
                 time.sleep(2)
                 continue
         except Exception as e:
-            logging.warning(f"获取数据失败 (尝试 {attempt + 1}/3): {e}")
+            logging.warning(f"获取数据失败 (尝试 {attempt}): {e}")
             time.sleep(2)
-    return None
+            continue
 
 def place_order(side: str, price: float, size: float, stop_loss: float = None, take_profit: float = None):
     """下单，仅在成功后推送Telegram消息"""
@@ -213,21 +225,33 @@ def place_order(side: str, price: float, size: float, stop_loss: float = None, t
 # ============ 主程序 ============
 
 if __name__ == "__main__":
-    logging.info("🚀 启动 OKX 自动交易机器人...")
-    print("启动交易机器人...")
-    send_telegram_message("🤖 交易机器人已启动！开始监控 BTC/USDT-SWAP 并执行交易。")
+    interval_secs = get_interval_seconds(BAR_INTERVAL)
+    logging.info(f"🚀 启动 OKX 自动交易机器人... K线周期: {BAR_INTERVAL} ({interval_secs}秒)")
+    print(f"启动交易机器人... K线周期: {BAR_INTERVAL} ({interval_secs}秒)")
+    send_telegram_message(f"🤖 交易机器人已启动！K线周期: {BAR_INTERVAL}，开始监控 BTC/USDT-SWAP 并执行交易。")
 
     current_position = None  # 当前持仓状态: None, "long", "short"
     entry_price = 0.0  # 入场价格
-    last_signal = None  # 上一次交易信号
     stop_loss = 0.0  # 止损价格
     take_profit = 0.0  # 止盈价格
+    last_signal = None  # 上一次交易信号
     last_candle_ts = 0  # 上一次K线时间戳
-    recorded_rsi = None  # 记录的RSI值
-    recorded_candle = None  # 记录的上一个K线数据，用于振幅和影线判断
+    last_ma_position = None  # 上次均线位置，用于检测初次
+    recorded_candle = None  # 记录的上一个K线数据
 
     while True:
         try:
+            # 同步到下一个K线结束时间
+            current_time = datetime.now(timezone.utc)
+            current_timestamp = int(current_time.timestamp())
+            # 计算当前周期内的偏移
+            cycle_start = (current_timestamp // interval_secs) * interval_secs
+            seconds_to_next_cycle = (cycle_start + interval_secs) - current_timestamp
+            if seconds_to_next_cycle > 0:
+                print(f"等待 {seconds_to_next_cycle} 秒到下一个 {BAR_INTERVAL} K线结束...")
+                time.sleep(seconds_to_next_cycle)  # 等待到K线周期结束
+
+            # 获取最新数据
             data = get_latest_price_and_indicators(SYMBOL)
             if data is None:
                 logging.error(f"无法获取 {SYMBOL} 的价格、交易量或指标，API 调用失败")
@@ -238,8 +262,8 @@ if __name__ == "__main__":
 
             price, volume, upper_shadow, lower_shadow, amplitude_percent, rsi, ma, ema, position, close, prev_close, avg_volume, open_price, high, low = data
 
-            # 判断是否为新K线结束
-            current_ts = int(time.time() // 60 * 60)  # 当前分钟开始时间戳
+            # 判断是否为新K线结束（基于周期时间戳）
+            current_ts = (int(time.time()) // interval_secs) * interval_secs  # 当前周期开始时间戳
             beijing_tz = timezone(timedelta(hours=8))
             last_candle_utc = datetime.fromtimestamp(last_candle_ts, tz=timezone.utc) if last_candle_ts > 0 else None
             last_candle_time_str = last_candle_utc.astimezone(beijing_tz).strftime('%Y-%m-%d %H:%M:%S') if last_candle_utc else "N/A"
@@ -251,83 +275,68 @@ if __name__ == "__main__":
                 last_candle_ts = current_ts
                 # 记录当前K线数据，用于下一根K线的判断
                 recorded_candle = {
-                    "open": open_price,  # 当前K线开盘价
+                    "open": open_price,
                     "close": close,
                     "high": high,
                     "low": low,
                     "volume": volume,
-                    "upper_shadow": upper_shadow,
-                    "lower_shadow": lower_shadow,
-                    "amplitude_percent": amplitude_percent
+                    "position": position  # 记录位置
                 }
 
-                # 检查均线位置和RSI，记录RSI值
-                if position == "在所有均线之上" and rsi is not None and rsi > RSI_OVERBOUGHT:
-                    recorded_rsi = rsi
-                    logging.info(f"记录RSI: {recorded_rsi:.2f} (超买，K线在所有均线之上)")
-                elif position == "在所有均线之下" and rsi is not None and rsi < RSI_OVERSOLD:
-                    recorded_rsi = rsi
-                    logging.info(f"记录RSI: {recorded_rsi:.2f} (超卖，K线在所有均线之下)")
-                else:
-                    recorded_rsi = None  # 重置RSI记录
-
-            # 在新K线开始时，检查是否满足交易条件（基于上一根K线）
+            # 检查下单和止盈条件（基于上一根K线）
             else:
-                if recorded_rsi is not None and recorded_candle is not None and rsi is not None:
-                    # 计算上一根K线的实体长度
-                    candle_body = abs(recorded_candle["close"] - recorded_candle["open"])
-                    candle_body = max(candle_body, 0.0001)  # 避免除以零
-                    upper_shadow_ratio = recorded_candle["upper_shadow"] / candle_body
-                    lower_shadow_ratio = recorded_candle["lower_shadow"] / candle_body
+                if recorded_candle is not None:
+                    recorded_position = recorded_candle["position"]
+                    # 打印下单参数
+                    params_msg = (
+                        f"下单参数检查: 当前位置: {position}, 上一位置: {recorded_position}, "
+                        f"上次位置: {last_ma_position}, 上一K线 - 开盘: {recorded_candle['open']:.2f}, 收盘: {recorded_candle['close']:.2f}, "
+                        f"最高: {recorded_candle['high']:.2f}, 最低: {recorded_candle['low']:.2f}"
+                    )
+                    print(params_msg)
+                    logging.info(params_msg)
 
-                    # 做空条件
-                    if recorded_rsi > RSI_OVERBOUGHT and rsi < recorded_rsi and recorded_candle["amplitude_percent"] > MIN_AMPLITUDE_PERCENT and recorded_candle["volume"] > avg_volume and upper_shadow_ratio > MIN_SHADOW_RATIO:
-                        signal = "sell"
-                        msg = f"⚠️ 做空信号: 上一根K线振幅: {recorded_candle['amplitude_percent']:.2f}%, 成交量: {recorded_candle['volume']} (平均: {avg_volume}), 上影线比例: {upper_shadow_ratio:.2f}, RSI: {rsi:.2f} < 记录RSI: {recorded_rsi:.2f}"
-                        logging.info(msg)
-                        print(msg)
-                        send_telegram_message(msg)
+                    # 止盈条件: 上一根K线在均线之间时止盈
+                    if recorded_position == "在均线之间":
+                        if current_position == "long":
+                            order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
+                            order = place_order("sell", price, order_size)
+                            if order:
+                                send_telegram_message(f"🎯 止盈卖出: 价格={price}, 上一K线在均线之间")
+                                current_position = None
+                                last_signal = None
+                        elif current_position == "short":
+                            order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
+                            order = place_order("buy", price, order_size)
+                            if order:
+                                send_telegram_message(f"🎯 止盈买入: 价格={price}, 上一K线在均线之间")
+                                current_position = None
+                                last_signal = None
 
-                    # 做多条件
-                    elif recorded_rsi < RSI_OVERSOLD and rsi > recorded_rsi and recorded_candle["amplitude_percent"] > MIN_AMPLITUDE_PERCENT and recorded_candle["volume"] > avg_volume and lower_shadow_ratio > MIN_SHADOW_RATIO:
-                        signal = "buy"
-                        msg = f"⚠️ 做多信号: 上一根K线振幅: {recorded_candle['amplitude_percent']:.2f}%, 成交量: {recorded_candle['volume']} (平均: {avg_volume}), 下影线比例: {lower_shadow_ratio:.2f}, RSI: {rsi:.2f} > 记录RSI: {recorded_rsi:.2f}"
-                        logging.info(msg)
-                        print(msg)
-                        send_telegram_message(msg)
+                    # 下单条件: 初次在所有均线上面或下面
+                    if recorded_position != last_ma_position:
+                        if recorded_position == "在所有均线之上":
+                            signal = "buy"
+                            msg = f"⚠️ 做多信号: 上一根K线初次在所有均线之上"
+                            logging.info(msg)
+                            print(msg)
+                            send_telegram_message(msg)
+                        elif recorded_position == "在所有均线之下":
+                            signal = "sell"
+                            msg = f"⚠️ 做空信号: 上一根K线初次在所有均线之下"
+                            logging.info(msg)
+                            print(msg)
+                            send_telegram_message(msg)
 
-            # 测试模式逻辑
-            if TEST_MODE and AUTO_TRADE_ENABLED:
-                import random
-                test_signal = "buy" if random.random() > 0.5 else "sell"
-                msg = f"🧪 测试模式下单: 信号={test_signal} | 价格={price} | 数量={ORDER_SIZE}"
-                logging.info(msg)
-                print(msg)
-                send_telegram_message(msg)
-                
-                order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
-                
-                if test_signal == "buy" and current_position != "long":
-                    stop_loss = price * (1 - STOP_LOSS_PERCENT)
-                    take_profit = price * (1 + TAKE_PROFIT_PERCENT)
-                    order = place_order("buy", price, order_size, stop_loss, take_profit)
-                    if order:
-                        current_position = "long"
-                        entry_price = price
-                        last_signal = test_signal
-                        recorded_rsi = None
-                elif test_signal == "sell" and current_position != "short":
-                    stop_loss = price * (1 + STOP_LOSS_PERCENT)
-                    take_profit = price * (1 - TAKE_PROFIT_PERCENT)
-                    order = place_order("sell", price, order_size, stop_loss, take_profit)
-                    if order:
-                        current_position = "short"
-                        entry_price = price
-                        last_signal = test_signal
-                        recorded_rsi = None
+                    # 更新上次位置
+                    last_ma_position = recorded_position
 
-            # 正常交易逻辑
-            elif AUTO_TRADE_ENABLED and signal and signal != last_signal:
+            # 输出当前状态
+            rsi_display = f"{rsi:.2f}" if rsi is not None else "N/A"
+            print(f"当前时间: {current_time_str} | 上一K线时间: {last_candle_time_str} | 收盘价格: {recorded_candle['close'] if recorded_candle else 'N/A'} | 位置: {position} | RSI: {rsi_display} | 信号: {signal} | 持仓: {current_position}")
+
+            # 交易逻辑
+            if AUTO_TRADE_ENABLED and signal and signal != last_signal:
                 order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
 
                 # 如果有持仓，先平仓
@@ -351,7 +360,6 @@ if __name__ == "__main__":
                         current_position = "long"
                         entry_price = price
                         last_signal = signal
-                        recorded_rsi = None  # 重置RSI记录
                 elif signal == "sell" and current_position is None:
                     stop_loss = price * (1 + STOP_LOSS_PERCENT)
                     take_profit = price * (1 - TAKE_PROFIT_PERCENT)
@@ -360,49 +368,22 @@ if __name__ == "__main__":
                         current_position = "short"
                         entry_price = price
                         last_signal = signal
-                        recorded_rsi = None  # 重置RSI记录
 
-            # 止损/止盈检查
-            if current_position == "long":
-                if price <= stop_loss:
-                    order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
-                    order = place_order("sell", price, order_size)
-                    if order:
-                        send_telegram_message(f"🛑 止损卖出: 价格={price}")
-                        current_position = None
-                        last_signal = None
-                        recorded_rsi = None
-                elif price >= take_profit:
-                    order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
-                    order = place_order("sell", price, order_size)
-                    if order:
-                        send_telegram_message(f"🎯 止盈卖出: 价格={price}")
-                        current_position = None
-                        last_signal = None
-                        recorded_rsi = None
-            elif current_position == "short":
-                if price >= stop_loss:
-                    order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
-                    order = place_order("buy", price, order_size)
-                    if order:
-                        send_telegram_message(f"🛑 止损买入: 价格={price}")
-                        current_position = None
-                        last_signal = None
-                        recorded_rsi = None
-                elif price <= take_profit:
-                    order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
-                    order = place_order("buy", price, order_size)
-                    if order:
-                        send_telegram_message(f"🎯 止盈买入: 价格={price}")
-                        current_position = None
-                        last_signal = None
-                        recorded_rsi = None
-
-            # 动态调整检查频率
-            if signal:
-                time.sleep(COOLDOWN)
-            else:
-                time.sleep(CHECK_INTERVAL)
+            # 止损检查
+            if current_position == "long" and price <= stop_loss:
+                order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
+                order = place_order("sell", price, order_size)
+                if order:
+                    send_telegram_message(f"🛑 止损卖出: 价格={price}")
+                    current_position = None
+                    last_signal = None
+            elif current_position == "short" and price >= stop_loss:
+                order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
+                order = place_order("buy", price, order_size)
+                if order:
+                    send_telegram_message(f"🛑 止损买入: 价格={price}")
+                    current_position = None
+                    last_signal = None
 
         except Exception as e:
             logging.error(f"程序错误: {e}")
