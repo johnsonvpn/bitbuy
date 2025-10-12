@@ -17,13 +17,9 @@ API_KEY = "c5788dfe-8ef0-4a07-812b-15c4c8f890b0"
 SECRET_KEY = "B72E8E3BE0141966165B18DF9D3805E9"
 PASS_PHRASE = "gamewell810DO*"
 
-# 接口开关
-ENABLE_TICKER_API = True  # 是否启用 Ticker API
-ENABLE_CANDLES_API = True  # 是否启用 Candles API
-ENABLE_TAKER_VOLUME_API = True  # 是否启用 Taker Volume API
-
 IS_DEMO = True  # True=模拟盘，False=实盘
 AUTO_TRADE_ENABLED = True  # True=自动下单，False=仅发送提醒
+TEST_MODE = False      # True=测试模式，不需要满足其他条件就可以下单
 SYMBOL = "BTC-USDT-SWAP"  # 永续合约
 CHECK_INTERVAL = 5  # 正常检查间隔（秒）
 COOLDOWN = 50  # 触发后的冷却时间（秒）
@@ -32,10 +28,13 @@ MIN_ORDER_SIZE = 0.001  # 最小下单数量
 RSI_PERIOD = 14  # RSI 计算周期
 MA_PERIODS = [20, 60, 120]  # MA 和 EMA 周期
 CANDLE_LIMIT = max(MA_PERIODS) + 10  # 多获取一些用于平均成交量
+BAR_INTERVAL = "5m"  # K线周期，可调整: "1m", "5m", "15m", "1H", "1D" 等
 RSI_OVERBOUGHT = 80  # RSI 超买阈值
 RSI_OVERSOLD = 20    # RSI 超卖阈值
 STOP_LOSS_PERCENT = 0.02  # 止损百分比 (2%)
 TAKE_PROFIT_PERCENT = 0.04  # 止盈百分比 (4%)
+MIN_AMPLITUDE_PERCENT = 2.0  # 最小振幅百分比
+MIN_SHADOW_RATIO = 1.0  # 影线长度与实体长度的最小比例
 
 # 配置日志
 logging.basicConfig(
@@ -89,6 +88,16 @@ def calculate_ma_ema(data, periods):
         logging.error(f"MA/EMA 计算失败: {e}")
         return {}, {}
 
+def calculate_avg_volume(data, periods=10):
+    """计算近期平均成交量"""
+    try:
+        reversed_data = data[::-1]
+        volumes = pd.Series([float(candle[5]) for candle in reversed_data])
+        return volumes.rolling(window=periods).mean().iloc[-1]
+    except Exception as e:
+        logging.error(f"平均成交量计算失败: {e}")
+        return None
+
 def determine_position(close, ma, ema):
     """判断当前 K 线收盘价相对于均线的位置"""
     all_lines = [line for line in list(ma.values()) + list(ema.values()) if not pd.isna(line)]
@@ -101,104 +110,70 @@ def determine_position(close, ma, ema):
     else:
         return "在均线之间"
 
+def get_interval_seconds(interval: str) -> int:
+    """根据K线周期字符串返回秒数"""
+    interval_map = {
+        "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
+        "1H": 3600, "2H": 7200, "4H": 14400, "6H": 21600, "12H": 43200,
+        "1D": 86400
+    }
+    return interval_map.get(interval, 60)  # 默认1m
+
 def get_latest_price_and_indicators(symbol: str) -> tuple:
-    """获取最新价格、RSI、MA、EMA、均线位置、上一根K线的RSI及Taker B/S"""
-    price = 0.0
-    rsi = None
-    prev_rsi = None
-    ma = {}
-    ema = {}
-    position = "无有效数据"
-    close = 0.0
-    prev_close = 0.0
-    prev_taker_buy = 0.0
-    prev_taker_sell = 0.0
-    candles_data = []
-
-    for attempt in range(3):
+    """获取最新价格、交易量、上下影线、振幅百分比、RSI、MA、EMA 和均线位置，失败时持续重试"""
+    attempt = 0
+    while True:
         try:
-            # 获取最新价格 (Ticker API)
-            if ENABLE_TICKER_API:
-                flag = "1" if IS_DEMO else "0"
-                market = MarketData.MarketAPI(flag=flag)
-                ticker_data = market.get_ticker(instId=symbol)
-                if ticker_data.get("code") != "0":
-                    logging.warning(f"Ticker API 失败: {ticker_data.get('msg')}")
-                    time.sleep(2)
-                    continue
-                price = float(ticker_data["data"][0]["last"])
-            else:
-                logging.warning("Ticker API 已禁用，返回默认价格 0.0")
-                price = 0.0
-
-            # 获取K线数据 (Candles API)
-            if ENABLE_CANDLES_API:
-                url = f"https://www.okx.com/api/v5/market/history-candles?instId={symbol}&bar=1m&limit={CANDLE_LIMIT}"
-                response = requests.get(url, timeout=5)
-                candles_data_response = response.json()
-                if candles_data_response.get("code") == "0" and candles_data_response.get("data"):
-                    candles_data = candles_data_response["data"]
-                    candle = candles_data[0]  # 当前K线
-                    prev_candle = candles_data[1] if len(candles_data) > 1 else candle  # 上一根K线
-                    
-                    close = float(candle[4])
-                    prev_close = float(prev_candle[4])
-                    
-                    # 计算当前K线的RSI
-                    rsi = calculate_rsi(candles_data)
-                    # 计算上一根K线的RSI
-                    prev_rsi = calculate_rsi(candles_data[1:]) if len(candles_data) > 1 else None
-                    ma, ema = calculate_ma_ema(candles_data, MA_PERIODS)
-                    position = determine_position(close, ma, ema)
-                else:
-                    logging.warning(f"K线 API 失败: {candles_data_response.get('msg')}")
-                    time.sleep(2)
-                    continue
-            else:
-                logging.warning("Candles API 已禁用，返回默认 K 线数据")
-                candles_data = []
-                close = 0.0
-                prev_close = 0.0
-                rsi = None
-                prev_rsi = None
-                ma = {}
-                ema = {}
-                position = "无 K 线数据"
-
-            # 获取Taker Volume数据 (Taker Volume API)
-            if ENABLE_TAKER_VOLUME_API:
-                taker_url = f"https://www.okx.com/api/v5/market/history-taker-volume?instId={symbol}&period=1m&limit=2"
-                taker_response = requests.get(taker_url, timeout=5)
-                taker_data = taker_response.json()
-                if taker_data.get("code") == "0" and taker_data.get("data"):
-                    prev_taker_buy = float(taker_data["data"][1][1]) if len(taker_data["data"]) > 1 else 0.0
-                    prev_taker_sell = float(taker_data["data"][1][2]) if len(taker_data["data"]) > 1 else 0.0
-                else:
-                    prev_taker_buy = 0.0
-                    prev_taker_sell = 0.0
-                    logging.warning(f"Taker Volume API 失败: {taker_data.get('msg')}")
-            else:
-                logging.warning("Taker Volume API 已禁用，返回默认 Taker Buy/Sell 0.0")
-                prev_taker_buy = 0.0
-                prev_taker_sell = 0.0
-
-            ma20_str = f"{ma['MA20']:.2f}" if ma.get('MA20') and not pd.isna(ma['MA20']) else "N/A"
-            rsi_str = f"{rsi:.2f}" if rsi is not None else "N/A"
-            prev_rsi_str = f"{prev_rsi:.2f}" if prev_rsi is not None else "N/A"
+            attempt += 1
+            flag = "1" if IS_DEMO else "0"
+            market = MarketData.MarketAPI(flag=flag)
+            ticker_data = market.get_ticker(instId=symbol)
+            if ticker_data.get("code") != "0":
+                logging.warning(f"Ticker API 失败 (尝试 {attempt}): {ticker_data.get('msg')}")
+                time.sleep(2)
+                continue
+            price = float(ticker_data["data"][0]["last"])
             
-            log_msg = (
-                f"成功获取数据: 价格={price}, RSI={rsi_str}, 上一根K线RSI={prev_rsi_str}, MA20={ma20_str}, "
-                f"位置={position}, 上一根K线Taker Buy={prev_taker_buy}, Taker Sell={prev_taker_sell}"
-            )
-            
-            logging.info(log_msg)
-            return price, rsi, prev_rsi, ma, ema, position, close, prev_close, prev_taker_buy, prev_taker_sell, candles_data
-
+            url = f"https://www.okx.com/api/v5/market/history-candles?instId={symbol}&bar={BAR_INTERVAL}&limit={CANDLE_LIMIT}"
+            response = requests.get(url, timeout=5)
+            candles_data = response.json()
+            if candles_data.get("code") == "0" and candles_data.get("data"):
+                candle = candles_data["data"][0]
+                prev_candle = candles_data["data"][1] if len(candles_data["data"]) > 1 else candle
+                open_price = float(candle[1])
+                high = float(candle[2])
+                low = float(candle[3])
+                close = float(candle[4])
+                volume = float(candle[5])
+                prev_close = float(prev_candle[4])
+                
+                upper_shadow = high - max(open_price, close)
+                lower_shadow = min(open_price, close) - low
+                amplitude_percent = (high - low) / low * 100 if low != 0 else 0.0
+                rsi = calculate_rsi(candles_data["data"])
+                ma, ema = calculate_ma_ema(candles_data["data"], MA_PERIODS)
+                position = determine_position(close, ma, ema)
+                avg_volume = calculate_avg_volume(candles_data["data"])
+                
+                ma20_str = f"{ma['MA20']:.2f}" if not pd.isna(ma['MA20']) else "N/A"
+                rsi_str = f"{rsi:.2f}" if rsi is not None else "N/A"
+                
+                log_msg = (
+                    f"成功获取价格: {price}, 交易量: {volume}, 上影线: {upper_shadow}, "
+                    f"下影线: {lower_shadow}, 振幅: {amplitude_percent:.2f}%, "
+                    f"RSI: {rsi_str}, MA20: {ma20_str}, 位置: {position}, 平均成交量: {avg_volume}, K线周期: {BAR_INTERVAL}"
+                )
+                
+                logging.info(log_msg)
+                return price, volume, upper_shadow, lower_shadow, amplitude_percent, rsi, ma, ema, position, close, prev_close, avg_volume, open_price, high, low
+            else:
+                logging.warning(f"K线 API 失败 (尝试 {attempt}): {candles_data.get('msg')}")
+                time.sleep(2)
+                continue
         except Exception as e:
-            logging.warning(f"获取数据失败 (尝试 {attempt + 1}/3): {e}")
+            logging.warning(f"获取数据失败 (尝试 {attempt}): {e}")
             time.sleep(2)
-    logging.error("所有接口尝试失败，返回默认值")
-    return None
+            continue
 
 def place_order(side: str, price: float, size: float, stop_loss: float = None, take_profit: float = None):
     """下单，仅在成功后推送Telegram消息"""
@@ -250,38 +225,47 @@ def place_order(side: str, price: float, size: float, stop_loss: float = None, t
 # ============ 主程序 ============
 
 if __name__ == "__main__":
-    logging.info("🚀 启动 OKX 自动交易机器人...")
-    print("启动交易机器人...")
-    send_telegram_message("🤖 交易机器人已启动！开始监控 BTC/USDT-SWAP 并执行交易。")
+    interval_secs = get_interval_seconds(BAR_INTERVAL)
+    logging.info(f"🚀 启动 OKX 自动交易机器人... K线周期: {BAR_INTERVAL} ({interval_secs}秒)")
+    print(f"启动交易机器人... K线周期: {BAR_INTERVAL} ({interval_secs}秒)")
+    send_telegram_message(f"🤖 交易机器人已启动！K线周期: {BAR_INTERVAL}，开始监控 BTC/USDT-SWAP 并执行交易。")
 
     current_position = None  # 当前持仓状态: None, "long", "short"
-    current_size = 0.0  # 当前持仓数量
     entry_price = 0.0  # 入场价格
-    last_signal = None  # 上一次交易信号
     stop_loss = 0.0  # 止损价格
     take_profit = 0.0  # 止盈价格
+    last_signal = None  # 上一次交易信号
     last_candle_ts = 0  # 上一次K线时间戳
-    
-    # RSI 记录变量
-    overbought_recorded_rsi = None  # 用于做空信号的记录RSI (>80)
-    oversold_recorded_rsi = None    # 用于做多信号的记录RSI (<20)
-    short_sl_recorded_rsi = None    # 做空止损记录RSI (<30)
-    long_sl_recorded_rsi = None     # 做多止损记录RSI (>70)
+    recorded_rsi = None  # 记录的RSI值（用于开仓）
+    recorded_rsi_profit = None  # 记录的RSI值（用于止盈）
+    recorded_candle = None  # 记录的上一个K线数据
+    is_profit_check = False  # 是否处于止盈检查状态
 
     while True:
         try:
+            # 同步到下一个K线结束时间
+            current_time = datetime.now(timezone.utc)
+            current_timestamp = int(current_time.timestamp())
+            # 计算当前周期内的偏移
+            cycle_start = (current_timestamp // interval_secs) * interval_secs
+            seconds_to_next_cycle = (cycle_start + interval_secs) - current_timestamp
+            if seconds_to_next_cycle > 0:
+                print(f"等待 {seconds_to_next_cycle} 秒到下一个 {BAR_INTERVAL} K线结束...")
+                time.sleep(seconds_to_next_cycle)  # 等待到K线周期结束
+
+            # 获取最新数据
             data = get_latest_price_and_indicators(SYMBOL)
             if data is None:
-                logging.error(f"无法获取 {SYMBOL} 的价格或指标，API 调用失败")
-                print(f"错误: 无法获取 {SYMBOL} 的价格或指标，API 调用失败")
+                logging.error(f"无法获取 {SYMBOL} 的价格、交易量或指标，API 调用失败")
+                print(f"错误: 无法获取 {SYMBOL} 的价格、交易量或指标，API 调用失败")
                 send_telegram_message(f"❌ 程序错误: 无法获取 {SYMBOL} 的数据，API 调用失败")
                 time.sleep(60)
                 continue
 
-            price, rsi, prev_rsi, ma, ema, position, close, prev_close, prev_taker_buy, prev_taker_sell, candles_data = data
+            price, volume, upper_shadow, lower_shadow, amplitude_percent, rsi, ma, ema, position, close, prev_close, avg_volume, open_price, high, low = data
 
-            # 判断是否为新K线结束
-            current_ts = int(time.time() // 60 * 60)  # 当前分钟开始时间戳
+            # 判断是否为新K线结束（基于周期时间戳）
+            current_ts = (int(time.time()) // interval_secs) * interval_secs  # 当前周期开始时间戳
             beijing_tz = timezone(timedelta(hours=8))
             last_candle_utc = datetime.fromtimestamp(last_candle_ts, tz=timezone.utc) if last_candle_ts > 0 else None
             last_candle_time_str = last_candle_utc.astimezone(beijing_tz).strftime('%Y-%m-%d %H:%M:%S') if last_candle_utc else "N/A"
@@ -290,188 +274,186 @@ if __name__ == "__main__":
 
             signal = None
             if current_ts > last_candle_ts:
-                # 新K线开始，基于上一根K线检查记录条件
                 last_candle_ts = current_ts
-                
-                # 记录超买RSI用于做空
-                if prev_rsi is not None and prev_rsi > RSI_OVERBOUGHT:
-                    overbought_recorded_rsi = prev_rsi
-                    print(f"记录超买RSI: {overbought_recorded_rsi:.2f} (用于做空)")
-                    logging.info(f"记录超买RSI: {overbought_recorded_rsi:.2f} (用于做空)")
-                
-                # 记录超卖RSI用于做多
-                if prev_rsi is not None and prev_rsi < RSI_OVERSOLD:
-                    oversold_recorded_rsi = prev_rsi
-                    print(f"记录超卖RSI: {oversold_recorded_rsi:.2f} (用于做多)")
-                    logging.info(f"记录超卖RSI: {oversold_recorded_rsi:.2f} (用于做多)")
-                
-                # 记录做空止损RSI
-                if current_position == "short" and rsi is not None and rsi < 30:
-                    short_sl_recorded_rsi = rsi
-                    print(f"记录做空止损RSI: {short_sl_recorded_rsi:.2f}")
-                    logging.info(f"记录做空止损RSI: {short_sl_recorded_rsi:.2f}")
-                
-                # 记录做多止损RSI
-                if current_position == "long" and rsi is not None and rsi > 70:
-                    long_sl_recorded_rsi = rsi
-                    print(f"记录做多止损RSI: {long_sl_recorded_rsi:.2f}")
-                    logging.info(f"记录做多止损RSI: {long_sl_recorded_rsi:.2f}")
-            
+                # 记录当前K线数据，用于下一根K线的判断
+                recorded_candle = {
+                    "open": open_price,
+                    "close": close,
+                    "high": high,
+                    "low": low,
+                    "volume": volume,
+                    "rsi": rsi
+                }
+
+                # 检查RSI用于开仓
+                if rsi is not None:
+                    if rsi > RSI_OVERBOUGHT:  # RSI > 80
+                        recorded_rsi = rsi
+                        is_profit_check = False
+                        print(f"记录RSI: {recorded_rsi:.2f} (超买)")
+                        logging.info(f"记录RSI: {recorded_rsi:.2f} (超买)")
+                    elif rsi < RSI_OVERSOLD:  # RSI < 20
+                        recorded_rsi = rsi
+                        is_profit_check = False
+                        print(f"记录RSI: {recorded_rsi:.2f} (超卖)")
+                        logging.info(f"记录RSI: {recorded_rsi:.2f} (超卖)")
+                    else:
+                        recorded_rsi = None  # 重置RSI记录
+
+                # 检查RSI用于止盈
+                if current_position == "long" and rsi > 70:
+                    recorded_rsi_profit = rsi
+                    is_profit_check = True
+                    print(f"记录止盈RSI: {recorded_rsi_profit:.2f} (多单)")
+                    logging.info(f"记录止盈RSI: {recorded_rsi_profit:.2f} (多单)")
+                elif current_position == "short" and rsi < 30:
+                    recorded_rsi_profit = rsi
+                    is_profit_check = True
+                    print(f"记录止盈RSI: {recorded_rsi_profit:.2f} (空单)")
+                    logging.info(f"记录止盈RSI: {recorded_rsi_profit:.2f} (空单)")
+
+            # 检查开仓条件（基于上一根K线）
             else:
-                # 在当前K线，检查信号条件
-                if overbought_recorded_rsi is not None and rsi is not None and rsi < overbought_recorded_rsi and prev_taker_sell > prev_taker_buy:
-                    signal = "sell"
-                    msg = f"⚠️ 做空信号: RSI {rsi:.2f} < 记录 {overbought_recorded_rsi:.2f}, Taker Sell > Buy ({prev_taker_sell} > {prev_taker_buy})"
-                    logging.info(msg)
-                    print(msg)
-                    send_telegram_message(msg)
-                
-                if oversold_recorded_rsi is not None and rsi is not None and rsi > oversold_recorded_rsi and prev_taker_sell < prev_taker_buy:
-                    signal = "buy"
-                    msg = f"⚠️ 做多信号: RSI {rsi:.2f} > 记录 {oversold_recorded_rsi:.2f}, Taker Buy > Sell ({prev_taker_buy} > {prev_taker_sell})"
-                    logging.info(msg)
-                    print(msg)
-                    send_telegram_message(msg)
-                
-                # 检查止损条件
-                if current_position == "short" and short_sl_recorded_rsi is not None and rsi is not None and rsi > short_sl_recorded_rsi:
-                    # 止损平空
-                    order_size = current_size
-                    order = place_order("buy", price, order_size)
-                    if order:
-                        send_telegram_message(f"🛑 做空止损: RSI {rsi:.2f} > 记录 {short_sl_recorded_rsi:.2f}, 平空")
-                        current_position = None
-                        current_size = 0.0
-                        short_sl_recorded_rsi = None
-                
-                if current_position == "long" and long_sl_recorded_rsi is not None and rsi is not None and rsi < long_sl_recorded_rsi:
-                    # 止损平多
-                    order_size = current_size
+                if recorded_rsi is not None and recorded_candle is not None and rsi is not None:
+                    mid_price = (recorded_candle["high"] + recorded_candle["low"]) / 2
+                    # 打印下单参数
+                    is_rise = recorded_candle["close"] > recorded_candle["open"]
+                    is_fall = recorded_candle["close"] < recorded_candle["open"]
+                    is_retrace_sell = recorded_candle["close"] < mid_price
+                    is_retrace_buy = recorded_candle["close"] > mid_price
+                    params_msg = (
+                        f"下单参数检查: 当前RSI: {rsi:.2f}, 记录RSI: {recorded_rsi:.2f}, "
+                        f"上一K线 - 开盘: {recorded_candle['open']:.2f}, 收盘: {recorded_candle['close']:.2f}, "
+                        f"最高: {recorded_candle['high']:.2f}, 最低: {recorded_candle['low']:.2f}, "
+                        f"中间价: {mid_price:.2f}, 是否上涨: {is_rise}, 是否下跌: {is_fall}, "
+                        f"卖单回撤>50%: {is_retrace_sell}, 买单回撤>50%: {is_retrace_buy}"
+                    )
+                    print(params_msg)
+                    logging.info(params_msg)
+
+                    # 做空条件
+                    sell_conditions = {
+                        "RSI条件": recorded_rsi > RSI_OVERBOUGHT and rsi < recorded_rsi,
+                        "K线上涨": is_rise,
+                        "回撤>50%": is_retrace_sell
+                    }
+                    if all(sell_conditions.values()):
+                        signal = "sell"
+                        msg = f"⚠️ 做空信号: RSI: {rsi:.2f} < 记录RSI: {recorded_rsi:.2f}, 上一根K线上涨后回撤 > 50%"
+                        logging.info(msg)
+                        print(msg)
+                        send_telegram_message(msg)
+                    else:
+                        failed_conditions = [k for k, v in sell_conditions.items() if not v]
+                        msg = f"做空条件未满足: {', '.join(failed_conditions)}"
+                        print(msg)
+                        logging.info(msg)
+
+                    # 做多条件
+                    buy_conditions = {
+                        "RSI条件": recorded_rsi < RSI_OVERSOLD and rsi > recorded_rsi,
+                        "K线下跌": is_fall,
+                        "回撤>50%": is_retrace_buy
+                    }
+                    if all(buy_conditions.values()):
+                        signal = "buy"
+                        msg = f"⚠️ 做多信号: RSI: {rsi:.2f} > 记录RSI: {recorded_rsi:.2f}, 上一根K线下跌后回撤 > 50%"
+                        logging.info(msg)
+                        print(msg)
+                        send_telegram_message(msg)
+                    else:
+                        failed_conditions = [k for k, v in buy_conditions.items() if not v]
+                        msg = f"做多条件未满足: {', '.join(failed_conditions)}"
+                        print(msg)
+                        logging.info(msg)
+
+            # 检查止盈条件
+            if is_profit_check and recorded_rsi_profit is not None and rsi is not None:
+                if current_position == "long" and rsi < recorded_rsi_profit:
+                    order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
                     order = place_order("sell", price, order_size)
                     if order:
-                        send_telegram_message(f"🛑 做多止损: RSI {rsi:.2f} < 记录 {long_sl_recorded_rsi:.2f}, 平多")
+                        send_telegram_message(f"🎯 止盈卖出: 价格={price}, RSI: {rsi:.2f} < 记录RSI: {recorded_rsi_profit:.2f}")
                         current_position = None
-                        current_size = 0.0
-                        long_sl_recorded_rsi = None
+                        last_signal = None
+                        recorded_rsi = None
+                        recorded_rsi_profit = None
+                        is_profit_check = False
+                elif current_position == "short" and rsi > recorded_rsi_profit:
+                    order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
+                    order = place_order("buy", price, order_size)
+                    if order:
+                        send_telegram_message(f"🎯 止盈买入: 价格={price}, RSI: {rsi:.2f} > 记录RSI: {recorded_rsi_profit:.2f}")
+                        current_position = None
+                        last_signal = None
+                        recorded_rsi = None
+                        recorded_rsi_profit = None
+                        is_profit_check = False
 
-            # 修复格式化问题
+            # 输出当前状态
             rsi_display = f"{rsi:.2f}" if rsi is not None else "N/A"
-            prev_rsi_display = f"{prev_rsi:.2f}" if prev_rsi is not None else "N/A"
-            print(f"当前时间: {current_time_str} | 上一K线时间: {last_candle_time_str} | 收盘价格: {close} | 位置: {position} | RSI: {rsi_display} | 上一根RSI: {prev_rsi_display} | 信号: {signal} | 持仓: {current_position}")
+            print(f"当前时间: {current_time_str} | 上一K线时间: {last_candle_time_str} | 收盘价格: {recorded_candle['close'] if recorded_candle else 'N/A'} | 位置: {position} | RSI: {rsi_display} | 记录RSI: {recorded_rsi if recorded_rsi else 'N/A'} | 止盈RSI: {recorded_rsi_profit if recorded_rsi_profit else 'N/A'} | 信号: {signal} | 持仓: {current_position}")
 
             # 交易逻辑
-            if AUTO_TRADE_ENABLED and signal:
+            if AUTO_TRADE_ENABLED and signal and signal != last_signal:
                 order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
+                double_order_size = order_size * 2  # 加倍下单数量
 
-                if signal == "sell":
-                    if current_position == "long":
-                        # 平多
-                        close_order = place_order("sell", price, current_size)
-                        if close_order:
-                            send_telegram_message(f"🛑 平多: 价格={price}")
-                            current_position = None
-                            current_size = 0.0
-                        # 再做空
-                        stop_loss = price * (1 + STOP_LOSS_PERCENT)
-                        take_profit = price * (1 - TAKE_PROFIT_PERCENT)
-                        open_order = place_order("sell", price, order_size, stop_loss, take_profit)
-                        if open_order:
-                            current_position = "short"
-                            current_size = order_size
-                            entry_price = price
-                            last_signal = signal
-                            overbought_recorded_rsi = None
-                    elif current_position == "short":
-                        # 加倍做空
-                        add_size = current_size
-                        stop_loss = price * (1 + STOP_LOSS_PERCENT)
-                        take_profit = price * (1 - TAKE_PROFIT_PERCENT)
-                        add_order = place_order("sell", price, add_size, stop_loss, take_profit)
-                        if add_order:
-                            current_size += add_size
-                            entry_price = (entry_price * (current_size - add_size) + price * add_size) / current_size  # 更新平均入场价
-                            last_signal = signal
-                            overbought_recorded_rsi = None
-                    else:
-                        # 无持仓，直接做空
-                        stop_loss = price * (1 + STOP_LOSS_PERCENT)
-                        take_profit = price * (1 - TAKE_PROFIT_PERCENT)
-                        open_order = place_order("sell", price, order_size, stop_loss, take_profit)
-                        if open_order:
-                            current_position = "short"
-                            current_size = order_size
-                            entry_price = price
-                            last_signal = signal
-                            overbought_recorded_rsi = None
-                
-                elif signal == "buy":
-                    if current_position == "short":
-                        # 平空
-                        close_order = place_order("buy", price, current_size)
-                        if close_order:
-                            send_telegram_message(f"🛑 平空: 价格={price}")
-                            current_position = None
-                            current_size = 0.0
-                        # 再做多
-                        stop_loss = price * (1 - STOP_LOSS_PERCENT)
-                        take_profit = price * (1 + TAKE_PROFIT_PERCENT)
-                        open_order = place_order("buy", price, order_size, stop_loss, take_profit)
-                        if open_order:
-                            current_position = "long"
-                            current_size = order_size
-                            entry_price = price
-                            last_signal = signal
-                            oversold_recorded_rsi = None
-                    elif current_position == "long":
-                        # 加倍做多
-                        add_size = current_size
-                        stop_loss = price * (1 - STOP_LOSS_PERCENT)
-                        take_profit = price * (1 + TAKE_PROFIT_PERCENT)
-                        add_order = place_order("buy", price, add_size, stop_loss, take_profit)
-                        if add_order:
-                            current_size += add_size
-                            entry_price = (entry_price * (current_size - add_size) + price * add_size) / current_size  # 更新平均入场价
-                            last_signal = signal
-                            oversold_recorded_rsi = None
-                    else:
-                        # 无持仓，直接做多
-                        stop_loss = price * (1 - STOP_LOSS_PERCENT)
-                        take_profit = price * (1 + TAKE_PROFIT_PERCENT)
-                        open_order = place_order("buy", price, order_size, stop_loss, take_profit)
-                        if open_order:
-                            current_position = "long"
-                            current_size = order_size
-                            entry_price = price
-                            last_signal = signal
-                            oversold_recorded_rsi = None
-
-            # 止盈检查
-            if current_position == "long":
-                if price >= take_profit:
-                    order_size = current_size
+                # 如果有持仓，先处理平仓或加倍
+                if signal == "sell" and current_position == "long":
                     order = place_order("sell", price, order_size)
                     if order:
-                        send_telegram_message(f"🎯 止盈卖出: 价格={price}")
+                        send_telegram_message(f"🛑 平仓: 卖出多单 | 价格={price}")
                         current_position = None
-                        current_size = 0.0
-                        last_signal = None
-                        long_sl_recorded_rsi = None
-            elif current_position == "short":
-                if price <= take_profit:
-                    order_size = current_size
+                elif signal == "buy" and current_position == "short":
                     order = place_order("buy", price, order_size)
                     if order:
-                        send_telegram_message(f"🎯 止盈买入: 价格={price}")
+                        send_telegram_message(f"🛑 平仓: 买入平空 | 价格={price}")
                         current_position = None
-                        current_size = 0.0
-                        last_signal = None
-                        short_sl_recorded_rsi = None
 
-            # 动态调整检查频率
-            if signal:
-                time.sleep(COOLDOWN)
-            else:
-                time.sleep(CHECK_INTERVAL)
+                # 执行新开仓或加倍
+                if signal == "buy":
+                    final_order_size = double_order_size if current_position == "long" else order_size
+                    stop_loss = price * (1 - STOP_LOSS_PERCENT)
+                    take_profit = price * (1 + TAKE_PROFIT_PERCENT)
+                    order = place_order("buy", price, final_order_size, stop_loss, take_profit)
+                    if order:
+                        current_position = "long"
+                        entry_price = price
+                        last_signal = signal
+                        recorded_rsi = None
+                elif signal == "sell":
+                    final_order_size = double_order_size if current_position == "short" else order_size
+                    stop_loss = price * (1 + STOP_LOSS_PERCENT)
+                    take_profit = price * (1 - TAKE_PROFIT_PERCENT)
+                    order = place_order("sell", price, final_order_size, stop_loss, take_profit)
+                    if order:
+                        current_position = "short"
+                        entry_price = price
+                        last_signal = signal
+                        recorded_rsi = None
+
+            # 止损检查
+            if current_position == "long" and price <= stop_loss:
+                order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
+                order = place_order("sell", price, order_size)
+                if order:
+                    send_telegram_message(f"🛑 止损卖出: 价格={price}")
+                    current_position = None
+                    last_signal = None
+                    recorded_rsi = None
+                    recorded_rsi_profit = None
+                    is_profit_check = False
+            elif current_position == "short" and price >= stop_loss:
+                order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
+                order = place_order("buy", price, order_size)
+                if order:
+                    send_telegram_message(f"🛑 止损买入: 价格={price}")
+                    current_position = None
+                    last_signal = None
+                    recorded_rsi = None
+                    recorded_rsi_profit = None
+                    is_profit_check = False
 
         except Exception as e:
             logging.error(f"程序错误: {e}")
