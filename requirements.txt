@@ -1,2 +1,7 @@
-flask
+python-okx
+pandas
 requests
+flask
+ccxt
+numpy
+tenacity
