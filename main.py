@@ -29,16 +29,14 @@ def send_message():
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     res = requests.post(url, data={"chat_id": CHAT_ID, "text": text})
-    return jsonify(res.json())
-
-def ping_space():
     while True:
         try:
             r = requests.get(HF_SPACE_URL, timeout=10)
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Ping {HF_SPACE_URL} -> {r.status_code}")
         except Exception as e:
             print(f"[ERROR] {e}")
-        time.sleep(INTERVAL)    
+        time.sleep(INTERVAL)  
+    return jsonify(res.json())
 
 if __name__ == "__main__":
     ping_space()
