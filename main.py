@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import threading
 import time
 import requests, os
 
@@ -10,8 +11,19 @@ SECRET_KEY = os.getenv("SECRET_KEY")  # 安全密钥
 
 # ============ 配置区域 ============
 HF_SPACE_URL = os.getenv("HF_SPACE_URL", "https://tangjohnson-jj.hf.space/")
-INTERVAL = int(os.getenv("PING_INTERVAL", "900"))  # 默认10分钟
+INTERVAL = int(os.getenv("PING_INTERVAL", "900"))  # 默认15分钟
 
+# ============ 保活线程函数 ============
+def ping_space():
+    while True:
+        try:
+            r = requests.get(HF_SPACE_URL, timeout=10)
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Ping {HF_SPACE_URL} -> {r.status_code}")
+        except Exception as e:
+            print(f"[ERROR] {e}")
+        time.sleep(INTERVAL)
+
+# ============ Flask 路由 ============
 @app.route("/")
 def home():
     return "✅ Telegram Push API Running"
@@ -29,15 +41,13 @@ def send_message():
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     res = requests.post(url, data={"chat_id": CHAT_ID, "text": text})
-    while True:
-        try:
-            r = requests.get(HF_SPACE_URL, timeout=10)
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Ping {HF_SPACE_URL} -> {r.status_code}")
-        except Exception as e:
-            print(f"[ERROR] {e}")
-        time.sleep(INTERVAL)  
     return jsonify(res.json())
 
+# ============ 主程序入口 ============
 if __name__ == "__main__":
-    ping_space()
+    # 启动后台线程进行 Hugging Face 保活
+    t = threading.Thread(target=ping_space, daemon=True)
+    t.start()
+
+    # 启动 Flask Web 服务
     app.run(host="0.0.0.0", port=10000)
