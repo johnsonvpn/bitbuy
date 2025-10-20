@@ -5,15 +5,14 @@ import requests, os
 
 app = Flask(__name__)
 
+# ============ 环境变量配置 ============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 SECRET_KEY = os.getenv("SECRET_KEY")  # 安全密钥
-
-# ============ 配置区域 ============
 HF_SPACE_URL = os.getenv("HF_SPACE_URL", "https://tangjohnson-jj.hf.space/")
 INTERVAL = int(os.getenv("PING_INTERVAL", "900"))  # 默认15分钟
 
-# ============ 保活线程函数 ============
+# ============ 后台保活函数 ============
 def ping_space():
     while True:
         try:
@@ -30,7 +29,7 @@ def home():
 
 @app.route("/send", methods=["POST"])
 def send_message():
-    data = request.get_json()
+    data = request.get_json(force=True)
     key = data.get("key", "")
     text = data.get("text", "")
 
@@ -45,9 +44,9 @@ def send_message():
 
 # ============ 主程序入口 ============
 if __name__ == "__main__":
-    # 启动后台线程进行 Hugging Face 保活
+    # 启动一个后台线程用于定时 ping Hugging Face
     t = threading.Thread(target=ping_space, daemon=True)
     t.start()
 
-    # 启动 Flask Web 服务
+    # 启动 Flask 服务
     app.run(host="0.0.0.0", port=10000)
