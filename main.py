@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import time
 import requests, os
 
 app = Flask(__name__)
@@ -6,6 +7,10 @@ app = Flask(__name__)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 SECRET_KEY = os.getenv("SECRET_KEY")  # 安全密钥
+
+# ============ 配置区域 ============
+HF_SPACE_URL = os.getenv("HF_SPACE_URL", "https://tangjohnson-jj.hf.space/")
+INTERVAL = int(os.getenv("PING_INTERVAL", "900"))  # 默认10分钟
 
 @app.route("/")
 def home():
@@ -26,5 +31,15 @@ def send_message():
     res = requests.post(url, data={"chat_id": CHAT_ID, "text": text})
     return jsonify(res.json())
 
+def ping_space():
+    while True:
+        try:
+            r = requests.get(HF_SPACE_URL, timeout=10)
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Ping {HF_SPACE_URL} -> {r.status_code}")
+        except Exception as e:
+            print(f"[ERROR] {e}")
+        time.sleep(INTERVAL)    
+
 if __name__ == "__main__":
+    ping_space()
     app.run(host="0.0.0.0", port=10000)
