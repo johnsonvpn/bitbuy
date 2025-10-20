@@ -9,23 +9,33 @@ app = Flask(__name__)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 SECRET_KEY = os.getenv("SECRET_KEY")  # 安全密钥
-HF_SPACE_URL = os.getenv("HF_SPACE_URL", "https://tangjohnson-jj.hf.space/")
+
+# 支持多个 Space 地址（用逗号分隔）
+HF_SPACE_URLS = os.getenv(
+    "HF_SPACE_URLS",
+    "https://tangjohnson-jj.hf.space/,https://tangjohnson-bit.hf.space/"
+).split(",")
+
 INTERVAL = int(os.getenv("PING_INTERVAL", "900"))  # 默认15分钟
 
 # ============ 后台保活函数 ============
-def ping_space():
+def ping_spaces():
     while True:
-        try:
-            r = requests.get(HF_SPACE_URL, timeout=10)
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Ping {HF_SPACE_URL} -> {r.status_code}")
-        except Exception as e:
-            print(f"[ERROR] {e}")
+        for url in HF_SPACE_URLS:
+            url = url.strip()
+            if not url:
+                continue
+            try:
+                r = requests.get(url, timeout=10)
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Ping {url} -> {r.status_code}")
+            except Exception as e:
+                print(f"[ERROR] Ping {url} failed: {e}")
         time.sleep(INTERVAL)
 
 # ============ Flask 路由 ============
 @app.route("/")
 def home():
-    return "✅ Telegram Push API Running"
+    return "✅ Telegram Push API Running & HuggingFace Keep-Alive Active"
 
 @app.route("/send", methods=["POST"])
 def send_message():
@@ -44,8 +54,8 @@ def send_message():
 
 # ============ 主程序入口 ============
 if __name__ == "__main__":
-    # 启动一个后台线程用于定时 ping Hugging Face
-    t = threading.Thread(target=ping_space, daemon=True)
+    # 启动后台线程执行多 Space 保活
+    t = threading.Thread(target=ping_spaces, daemon=True)
     t.start()
 
     # 启动 Flask 服务
