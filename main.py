@@ -1,41 +1,55 @@
 from flask import Flask, request, jsonify
 import threading
 import time
-import requests, os
+import requests
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 app = Flask(__name__)
 
 # ============ 环境变量配置 ============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-SECRET_KEY = os.getenv("SECRET_KEY")  # 安全密钥
+SECRET_KEY = os.getenv("SECRET_KEY")
 
-# 支持多个 Space 地址（用逗号分隔）
-HF_SPACE_URLS = os.getenv(
+HF_SPACE_URLS = [url.strip() for url in os.getenv(
     "HF_SPACE_URLS",
-    "https://tangjohnson-fl.hf.space/,ttps://tangjohnson-fl.hf.space/,https://tangjohnson-jj.hf.space/,https://tangjohnson-bit.hf.space/,"
-).split(",")
+    "https://tangjohnson-fl.hf.space/,https://tangjohnson-fl.hf.space/,https://tangjohnson-jj.hf.space/,https://tangjohnson-bit.hf.space/"
+).split(",") if url.strip()]
 
-INTERVAL = int(os.getenv("PING_INTERVAL", "900"))  # 默认15分钟
+INTERVAL = int(os.getenv("PING_INTERVAL", "900"))
+
+# 线程池
+executor = ThreadPoolExecutor(max_workers=len(HF_SPACE_URLS) or 1)
 
 # ============ 后台保活函数 ============
+def ping_single_space(url):
+    try:
+        r = requests.get(url, timeout=10)
+        return url, r.status_code
+    except requests.exceptions.Timeout:
+        return url, "timeout"
+    except Exception as e:
+        return url, f"error: {e}"
+
 def ping_spaces():
     while True:
-        for url in HF_SPACE_URLS:
-            url = url.strip()
-            if not url:
-                continue
-            try:
-                r = requests.get(url, timeout=10)
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Ping {url} -> {r.status_code}")
-            except Exception as e:
-                print(f"[ERROR] Ping {url} failed: {e}")
+        if not HF_SPACE_URLS:
+            time.sleep(INTERVAL)
+            continue
+
+        futures = [executor.submit(ping_single_space, url) for url in HF_SPACE_URLS]
+        for future in as_completed(futures, timeout=15):
+            url, result = future.result()
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Ping {url} -> {result}")
+
+        print(f"--- 休眠 {INTERVAL}s ---")
         time.sleep(INTERVAL)
 
 # ============ Flask 路由 ============
 @app.route("/")
 def home():
-    return "✅ Telegram Push API Running & HuggingFace Keep-Alive Active"
+    return "Telegram Push API Running & HF Keep-Alive Active"
 
 @app.route("/send", methods=["POST"])
 def send_message():
@@ -49,14 +63,11 @@ def send_message():
         return jsonify({"error": "Missing text"}), 400
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    res = requests.post(url, data={"chat_id": CHAT_ID, "text": text})
+    res = requests.post(url, data={"chat_id": CHAT_ID, "text": text}, timeout=10)
     return jsonify(res.json())
 
 # ============ 主程序入口 ============
 if __name__ == "__main__":
-    # 启动后台线程执行多 Space 保活
     t = threading.Thread(target=ping_spaces, daemon=True)
     t.start()
-
-    # 启动 Flask 服务
     app.run(host="0.0.0.0", port=10000)
