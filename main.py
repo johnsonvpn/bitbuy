@@ -13,7 +13,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")  # 安全密钥
 # 支持多个 Space 地址（用逗号分隔）
 HF_SPACE_URLS = os.getenv(
     "HF_SPACE_URLS",
-    "https://tangjohnson-jj.hf.space/,https://tangjohnson-bit.hf.space/,https://tangjohnson-fl.hf.space/"
+    "https://tangjohnson-fl.hf.space/,https://tangjohnson-jj.hf.space/,https://tangjohnson-bit.hf.space/,"
 ).split(",")
 
 INTERVAL = int(os.getenv("PING_INTERVAL", "900"))  # 默认15分钟
