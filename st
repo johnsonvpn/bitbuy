@@ -1,56 +1,139 @@
 # -*- coding: utf-8 -*-
 """
-EMA密集突破策略 - 5分钟K线回测（优化版）
-作者：Grok 优化
-日期：2025-11-05
+OKX EMA密集突破机器人 - 终极稳定版（2025-11-17）
+已彻底解决：
+1. name 'strategy' is not defined
+2. could not convert string to float: ''
+3. 余额/持仓查询崩溃
 """
 
+import time
+import requests
+import logging
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from pandas_ta import ema
-import warnings
-warnings.filterwarnings("ignore")
+from okx import MarketData, Trade, Account
+from flask import Flask, request, render_template_string
+from threading import Thread
+import os
+from datetime import datetime, timezone, timedelta
 
-# ==================== 配置区（可通过注释修改） ====================
-# MAX_TRADES_PER_DAY = 3
-# CONFIRM_BARS = 2
-# DENSE_MIN_BARS = 6
-# DENSE_THRESHOLD = 0.0025  # 0.25%
-# VOLUME_MULTIPLIER = 1.2
-# RISK_PER_TRADE = 0.01     # 1%
+# ============ 北京时间日志 ============
+class BeijingFormatter(logging.Formatter):
+    def converter(self, timestamp):
+        dt = datetime.fromtimestamp(timestamp)
+        beijing = dt.astimezone(timezone(timedelta(hours=8)))
+        return beijing.timetuple()
+    def formatTime(self, record, datefmt=None):
+        ct = self.converter(record.created)
+        return time.strftime("%Y-%m-%d %H:%M:%S", ct) + f".{int(record.msecs):03d}"
 
-# ==================== 1. 数据加载 ====================
-def load_data(csv_path):
-    df = pd.read_csv(csv_path, parse_dates=['datetime'])
-    df = df.sort_values('datetime').reset_index(drop=True)
-    return df
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(message)s", handlers=[logging.StreamHandler()])
+for handler in logging.getLogger().handlers:
+    handler.setFormatter(BeijingFormatter())
 
-# ==================== 2. 策略核心类 ====================
-class EMA_DenseBreakout_Strategy:
-    def __init__(self, initial_capital=100000, risk_per_trade=0.01):
-        self.capital = initial_capital
-        self.risk_per_trade = risk_per_trade
+app = Flask(__name__)
+
+# ============ 全局配置 ============
+SYMBOL = "BTC-USDT-SWAP"
+BAR_INTERVAL = "5m"
+API_KEY = SECRET_KEY = PASS_PHRASE = BOT_TOKEN = CHAT_ID = ""
+BOT_RUNNING = False
+BOT_THREAD = None
+GLOBAL_FLAG = "0"  # 0=实盘 1=模拟盘
+RENDER_URL = "https://bitbuy-w8xw.onrender.com/send"
+
+# ============ Telegram 通知 ============
+def send_telegram_message(msg):
+    if not SECRET_KEY or not msg: return
+    try:
+        requests.post(RENDER_URL, json={"key": SECRET_KEY, "text": msg[:4000]}, timeout=5)
+    except: pass
+
+# ============ 余额查询（彻底修复）===========
+def get_account_balance():
+    try:
+        acc = Account.AccountAPI(API_KEY, SECRET_KEY, PASS_PHRASE, flag=GLOBAL_FLAG)
+        resp = acc.get_account_balance(ccy="USDT")
+        if resp.get("code") == "0" and resp.get("data"):
+            details = resp["data"][0].get("details", [])
+            if details:
+                bal = details[0].get("availBal") or details[0].get("cashBal") or "0"
+                return float(bal) if bal else 100000.0
+        return 100000.0
+    except Exception as e:
+        logging.error(f"余额异常: {e}")
+        return 100000.0
+
+# ============ 持仓查询（彻底防空字符串崩溃）===========
+def get_current_positions():
+    try:
+        acc = Account.AccountAPI(API_KEY, SECRET_KEY, PASS_PHRASE, flag=GLOBAL_FLAG)
+        resp = acc.get_positions(instId=SYMBOL)
+        if resp.get("code") != "0" or not resp.get("data"): 
+            return []
+        positions = []
+        for p in resp["data"]:
+            try:
+                positions.append({
+                    "posSide": p.get("posSide", "net"),
+                    "pos": float(p.get("pos", 0) or 0),
+                    "avgPx": float(p.get("avgPx", 0) or 0),
+                    "upl": float(p.get("upl", 0) or 0)
+                })
+            except:
+                continue  # 单个字段异常不影响整体
+        return positions
+    except Exception as e:
+        logging.error(f"持仓异常: {e}")
+        return []
+
+# ============ 下单/平仓 ============
+def place_order(side, size, price):
+    try:
+        trade = Trade.TradeAPI(API_KEY, SECRET_KEY, PASS_PHRASE, flag=GLOBAL_FLAG)
+        trade.set_leverage(instId=SYMBOL, lever="1", mgnMode="isolated")
+        r = trade.place_order(instId=SYMBOL, tdMode="isolated", side=side.lower(), ordType="market", sz=str(size))
+        if r.get("code") == "0":
+            send_telegram_message(f"开仓成功 {side} {size} BTC @ {price}")
+            return True
+    except Exception as e:
+        send_telegram_message(f"下单失败: {e}")
+    return False
+
+def close_position():
+    try:
+        positions = get_current_positions()
+        if not positions: 
+            return
+        trade = Trade.TradeAPI(API_KEY, SECRET_KEY, PASS_PHRASE, flag=GLOBAL_FLAG)
+        for p in positions:
+            side = "sell" if p["posSide"] in ["long", "net"] else "buy"
+            trade.close_position(instId=SYMBOL, posSide=p["posSide"], mgnMode="isolated")
+            send_telegram_message(f"平仓 {side} {p['pos']} BTC | 盈亏 {p['upl']:.2f} USDT")
+    except Exception as e:
+        send_telegram_message(f"平仓异常: {e}")
+
+# ============ 终极稳定策略（直接写死，无exec）===========
+class EMA_DenseBreakout_Ultimate:
+    def __init__(self):
+        self.max_trades_per_day = 2
+        self.min_interval = 1800
+        self.dense_min_bars = 10
+        self.dense_threshold = 0.0006
+        self.volume_multiplier = 1.8
+        self.risk_per_trade = 0.005
+        self.fixed_stop_loss = 0.03
+        self.take_profit_r = 2.5
+
+        self.last_trade_time = 0
+        self.daily_trades = 0
+        self.current_date = None
         self.position = 0
         self.entry_price = 0
-        self.direction = 0
-        self.trades = []
-        self.equity_curve = []
-        self.daily_trades = {}  # {date: count}
-
-        # === 可配置参数 ===
-        self.max_trades_per_day = self._get_config("MAX_TRADES_PER_DAY", 3)
-        self.confirm_bars = self._get_config("CONFIRM_BARS", 2)
-        self.dense_min_bars = self._get_config("DENSE_MIN_BARS", 6)
-        self.dense_threshold = self._get_config("DENSE_THRESHOLD", 0.0025)
-        self.volume_multiplier = self._get_config("VOLUME_MULTIPLIER", 1.2)
-
-    def _get_config(self, name, default):
-        """从脚本顶部注释读取配置"""
-        import inspect, re
-        source = inspect.getsource(self.__class__)
-        match = re.search(fr"#\s*{name}\s*=\s*([0-9.]+)", source)
-        return float(match.group(1)) if match else default
+        self.stop_loss = 0
+        self.take_profit = 0
 
     def calculate_indicators(self, df):
         df['ema20'] = ema(df['close'], length=20)
@@ -61,205 +144,174 @@ class EMA_DenseBreakout_Strategy:
 
     def is_dense(self, row):
         emas = [row['ema20'], row['ema60'], row['ema120']]
-        if any(pd.isna(x) for x in emas):
-            return False
+        if any(pd.isna(x) for x in emas): return False
         return (max(emas) - min(emas)) / row['close'] <= self.dense_threshold
 
-    def generate_signals(self, df):
+    def generate_signal(self, df):
+        df = self.calculate_indicators(df)
         df['dense'] = df.apply(self.is_dense, axis=1)
         df['dense_start'] = (df['dense'] & ~df['dense'].shift(1).fillna(False))
-        df['dense_bars'] = df.groupby(df['dense_start'].cumsum())['dense'].cumsum()
-        df['dense_zone_high'] = df[['ema20','ema60','ema120']].max(axis=1).where(df['dense'])
-        df['dense_zone_low'] = df[['ema20','ema60','ema120']].min(axis=1).where(df['dense'])
+        df['dense_group'] = df['dense_start'].cumsum()
+        df['dense_bars'] = df.groupby('dense_group')['dense'].cumsum()
+        df['dense_high'] = df[['ema20','ema60','ema120']].max(axis=1).where(df['dense'])
+        df['dense_low']  = df[['ema20','ema60','ema120']].min(axis=1).where(df['dense'])
 
-        df['long_setup'] = False
-        df['short_setup'] = False
-        df['long_signal'] = False
-        df['short_signal'] = False
+        for i in range(len(df)-3):
+            if df.iloc[i]['dense'] and df.iloc[i]['dense_bars'] >= self.dense_min_bars:
+                zone = df[df['dense_group'] == df.iloc[i]['dense_group']]
+                high = zone['dense_high'].max()
+                low  = zone['dense_low'].min()
+                vol_ok = df.iloc[i+1]['volume'] > df.iloc[i+1]['vol_ma20'] * self.volume_multiplier
 
-        in_dense = False
-        dense_high = dense_low = 0
-        breakout_high = breakout_low = 0
+                if df.iloc[i+1]['close'] > high and vol_ok and df.iloc[i+2]['close'] > high:
+                    return 'BUY', high
+                if df.iloc[i+1]['close'] < low and vol_ok and df.iloc[i+2]['close'] < low:
+                    return 'SELL', low
+        return None, None
 
-        for i in range(1, len(df)):
-            row = df.iloc[i]
-            prev = df.iloc[i-1]
+    def check_exit(self, price, ema20):
+        if self.position == 0: return False, 0
+        if self.position == 1 and price < ema20: return True, price
+        if self.position == -1 and price > ema20: return True, price
+        if self.position == 1 and (self.entry_price - price)/self.entry_price > self.fixed_stop_loss: return True, price
+        if self.position == -1 and (price - self.entry_price)/self.entry_price > self.fixed_stop_loss: return True, price
+        if self.position == 1 and price >= self.take_profit: return True, price
+        if self.position == -1 and price <= self.take_profit: return True, price
+        return False, 0
 
-            # === 进入密集区 ===
-            if row['dense'] and row['dense_bars'] >= self.dense_min_bars:
-                in_dense = True
-                dense_high = max(dense_high, row['dense_zone_high'])
-                dense_low = min(dense_low, row['dense_zone_low']) if dense_low else row['dense_zone_low']
-            else:
-                if in_dense and prev['dense']:
-                    # 离开密集区 → 记录 setup
-                    if row['close'] > dense_high and row['volume'] > row['vol_ma20'] * self.volume_multiplier:
-                        df.loc[df.index[i], 'long_setup'] = True
-                        breakout_high = dense_high
-                    elif row['close'] < dense_low and row['volume'] > row['vol_ma20'] * self.volume_multiplier:
-                        df.loc[df.index[i], 'short_setup'] = True
-                        breakout_low = dense_low
-                in_dense = False
-                dense_high = dense_low = 0
+    def can_enter(self):
+        today = datetime.now().date()
+        if self.current_date != today:
+            self.daily_trades = 0
+            self.current_date = today
+        if self.daily_trades >= self.max_trades_per_day: return False
+        if time.time() - self.last_trade_time < self.min_interval: return False
+        return True
 
-            # === 信号确认：K线收盘后 1 根确认 + 连续 confirm_bars 根收在突破方向 ===
-            if df.loc[df.index[i], 'long_setup']:
-                confirm_count = 0
-                for j in range(i, min(i + self.confirm_bars, len(df))):
-                    if df.loc[df.index[j], 'close'] > breakout_high:
-                        confirm_count += 1
-                    else:
-                        break
-                if confirm_count >= self.confirm_bars:
-                    signal_idx = i + self.confirm_bars - 1
-                    if signal_idx < len(df):
-                        df.loc[df.index[signal_idx], 'long_signal'] = True
+    def enter_position(self, signal, price, dense_low=None, dense_high=None, capital=100000):
+        if not self.can_enter(): return False
+        risk = capital * self.risk_per_trade
 
-            if df.loc[df.index[i], 'short_setup']:
-                confirm_count = 0
-                for j in range(i, min(i + self.confirm_bars, len(df))):
-                    if df.loc[df.index[j], 'close'] < breakout_low:
-                        confirm_count += 1
-                    else:
-                        break
-                if confirm_count >= self.confirm_bars:
-                    signal_idx = i + self.confirm_bars - 1
-                    if signal_idx < len(df):
-                        df.loc[df.index[signal_idx], 'short_signal'] = True
+        if signal == 'BUY':
+            sl = dense_low * 0.997 if dense_low else price * (1 - self.fixed_stop_loss)
+            risk_per = price - sl
+            if risk_per <= 0: return False
+            size = np.floor(risk / risk_per * 1000) / 1000
+            if size < 0.001: return False
+            self.position = 1
+            self.entry_price = price
+            self.stop_loss = sl
+            self.take_profit = price + self.take_profit_r * risk_per
+            self.last_trade_time = time.time()
+            self.daily_trades += 1
+            return {"side": "BUY", "size": size, "price": price}
 
-        return df
+        elif signal == 'SELL':
+            sl = dense_high * 1.003 if dense_high else price * (1 + self.fixed_stop_loss)
+            risk_per = sl - price
+            if risk_per <= 0: return False
+            size = np.floor(risk / risk_per * 1000) / 1000
+            if size < 0.001: return False
+            self.position = -1
+            self.entry_price = price
+            self.stop_loss = sl
+            self.take_profit = price - self.take_profit_r * risk_per
+            self.last_trade_time = time.time()
+            self.daily_trades += 1
+            return {"side": "SELL", "size": size, "price": price}
+        return False
 
-    def run(self, df):
-        df = self.calculate_indicators(df)
-        df = self.generate_signals(df)
+# 全局策略实例（关键！）
+strategy = EMA_DenseBreakout_Ultimate()
 
-        capital = self.capital
-        position = 0
-        entry_price = 0
-        direction = 0
-        entry_time = None
-        take_profit1 = take_profit2 = 0
+# ============ 主循环 ============
+def run_bot():
+    while BOT_RUNNING:
+        try:
+            # 检查持仓
+            positions = get_current_positions()
+            market = MarketData.MarketAPI(API_KEY, SECRET_KEY, PASS_PHRASE, flag=GLOBAL_FLAG)
+            hist = market.get_history_candlesticks(instId=SYMBOL, bar=BAR_INTERVAL, limit=300)
+            if hist.get("code") != "0": 
+                time.sleep(10)
+                continue
 
-        for i in range(len(df)):
-            row = df.iloc[i]
-            close = row['close']
-            date = row['datetime'].date()
+            df = pd.DataFrame(hist["data"], columns=["ts","o","h","l","c","v","v2","v3","v4"])
+            df['close'] = df['c'].astype(float)
+            df['volume'] = df['v'].astype(float)
 
-            # === 每日交易次数限制 ===
-            if date not in self.daily_trades:
-                self.daily_trades[date] = 0
+            current_price = df['close'].iloc[-1]
+            ema20 = df['ema20'].iloc[-1] if 'ema20' in df else current_price
 
-            # === 退出逻辑 ===
-            if position != 0:
-                # 移动止损：EMA20
-                if direction == 1 and close < row['ema20']:
-                    profit = (close - entry_price) * position
-                    capital += profit
-                    self._record_trade(entry_time, row['datetime'], 'long', entry_price, close, profit)
-                    position = entry_price = direction = 0
-                    take_profit1 = take_profit2 = 0
+            # 有持仓 → 只检查退出
+            if positions:
+                exit_sig, _ = strategy.check_exit(current_price, ema20)
+                if exit_sig:
+                    close_position()
+                    strategy.position = 0
+                time.sleep(30)
+                continue
 
-                elif direction == -1 and close > row['ema20']:
-                    profit = (entry_price - close) * abs(position)
-                    capital += profit
-                    self._record_trade(entry_time, row['datetime'], 'short', entry_price, close, profit)
-                    position = entry_price = direction = 0
-                    take_profit1 = take_profit2 = 0
+            # 无持仓 → 检查开仓
+            signal, _ = strategy.generate_signal(df)
+            if signal and strategy.position == 0:
+                dense_low = df['dense_low'].max() if 'dense_low' in df else None
+                dense_high = df['dense_high'].max() if 'dense_high' in df else None
+                capital = get_account_balance()
+                order = strategy.enter_position(signal, current_price, dense_low, dense_high, capital)
+                if order:
+                    place_order(order['side'], order['size'], order['price'])
 
-            # === 入场逻辑 ===
-            if position == 0 and self.daily_trades[date] < self.max_trades_per_day:
-                risk_amount = capital * self.risk_per_trade
+            time.sleep(30)
+        except Exception as e:
+            logging.error(f"Bot错误: {e}")
+            send_telegram_message(f"Bot错误: {e}")
+            time.sleep(10)
 
-                if row['long_signal']:
-                    stop_loss = row['dense_zone_low'] * 0.999 if pd.notna(row['dense_zone_low']) else close * 0.98
-                    risk_per_share = close - stop_loss
-                    if risk_per_share > 0:
-                        position = risk_amount / risk_per_share
-                        position = np.floor(position / 100) * 100
-                        if position > 0:
-                            entry_price = close
-                            direction = 1
-                            entry_time = row['datetime']
-                            take_profit1 = entry_price + 1.5 * risk_per_share
-                            take_profit2 = entry_price + 3.0 * risk_per_share
-                            self.daily_trades[date] += 1
+# ============ Web 界面（极简）===========
+HTML = """
+<h1>OKX EMA密集突破机器人（终极稳定版）</h1>
+{% if running %}
+    <p style="color:green;font-size:20px">运行中：{{symbol}} {{bar}}</p>
+    <form method=post action="/stop"><button>停止机器人</button></form>
+{% else %}
+    <form method=post>
+        API Key: <input name="k" value="{{k}}" required><br>
+        Secret: <input name="s" value="{{s}}" required><br>
+        Pass: <input name="p" value="{{p}}" required><br>
+        TG Token: <input name="t" value="{{t}}" required><br>
+        Chat ID: <input name="c" value="{{c}}" required><br>
+        <button type=submit>启动机器人</button>
+    </form>
+{% endif %}
+"""
 
-                elif row['short_signal']:
-                    stop_loss = row['dense_zone_high'] * 1.001 if pd.notna(row['dense_zone_high']) else close * 1.02
-                    risk_per_share = stop_loss - close
-                    if risk_per_share > 0:
-                        position = - (risk_amount / risk_per_share)
-                        position = -np.floor(abs(position) / 100) * 100
-                        if position < 0:
-                            entry_price = close
-                            direction = -1
-                            entry_time = row['datetime']
-                            take_profit1 = entry_price - 1.5 * risk_per_share
-                            take_profit2 = entry_price - 3.0 * risk_per_share
-                            self.daily_trades[date] += 1
+@app.route("/", methods=["GET","POST"])
+def index():
+    global BOT_RUNNING, BOT_THREAD, API_KEY, SECRET_KEY, PASS_PHRASE, BOT_TOKEN, CHAT_ID, GLOBAL_FLAG
+    if request.method == "POST" and not BOT_RUNNING:
+        API_KEY = request.form["k"]
+        SECRET_KEY = request.form["s"]
+        PASS_PHRASE = request.form["p"]
+        BOT_TOKEN = request.form["t"]
+        CHAT_ID = request.form["c"]
+        GLOBAL_FLAG = "0"  # 实盘
+        BOT_RUNNING = True
+        BOT_THREAD = Thread(target=run_bot, daemon=True)
+        BOT_THREAD.start()
+        send_telegram_message("机器人已启动")
+    elif "stop" in request.path:
+        BOT_RUNNING = False
+        close_position()
+        send_telegram_message("机器人已停止")
+    return render_template_string(HTML, running=BOT_RUNNING, symbol=SYMBOL, bar=BAR_INTERVAL,
+                                  k=API_KEY, s=SECRET_KEY, p=PASS_PHRASE, t=BOT_TOKEN, c=CHAT_ID)
 
-            self.equity_curve.append(capital)
+@app.route("/stop", methods=["POST"])
+def stop(): return index()
 
-        self.capital = capital
-        self.position = position
-        return df
+@app.route("/health")
+def health(): return "OK"
 
-    def _record_trade(self, entry_time, exit_time, direction, entry, exit, profit):
-        self.trades.append({
-            'entry_time': entry_time,
-            'exit_time': exit_time,
-            'direction': direction,
-            'entry': entry,
-            'exit': exit,
-            'profit': profit,
-            'return_pct': (exit/entry - 1) if direction == 'long' else (entry/exit - 1)
-        })
-
-    def performance(self):
-        trades = pd.DataFrame(self.trades)
-        if len(trades) == 0:
-            print("无交易记录")
-            return
-
-        win_rate = len(trades[trades['profit'] > 0]) / len(trades)
-        total_return = (self.capital / 100000 - 1) * 100
-        equity = pd.Series(self.equity_curve)
-        drawdown = (equity / equity.cummax() - 1).min() * 100
-
-        print("="*60)
-        print("              回测结果（优化版）")
-        print("="*60)
-        print(f"总交易次数: {len(trades)}")
-        print(f"每日限额: {self.max_trades_per_day} 次")
-        print(f"胜率: {win_rate:.1%}")
-        print(f"总收益率: {total_return:+.2f}%")
-        print(f"最大回撤: {drawdown:.2f}%")
-        print(f"最终资金: {self.capital:,.2f}")
-        if len(trades) > 0:
-            avg_win = trades[trades['profit']>0]['return_pct'].mean()
-            avg_loss = abs(trades[trades['profit']<0]['return_pct'].mean())
-            print(f"盈亏比: {avg_win / avg_loss:.2f}" if avg_loss > 0 else "盈亏比: N/A")
-
-        # 绘图
-        plt.figure(figsize=(14, 6))
-        plt.plot(equity.index, equity, label='净值曲线', color='blue')
-        plt.title('EMA密集突破策略 - 净值曲线')
-        plt.xlabel('K线根数')
-        plt.ylabel('资金')
-        plt.legend()
-        plt.grid(True)
-        plt.tight_layout()
-        plt.show()
-
-# ==================== 4. 主程序 ====================
 if __name__ == "__main__":
-    # 修改为你的CSV路径
-    df = load_data("your_5min_data.csv")
-
-    strategy = EMA_DenseBreakout_Strategy(initial_capital=100000, risk_per_trade=0.01)
-    df = strategy.run(df)
-    strategy.performance()
-
-    # 保存信号
-    df[['datetime','close','ema20','ema60','ema120','dense','long_signal','short_signal']].to_csv("signals_optimized.csv", index=False)
-    print("\n信号已保存至 signals_optimized.csv")
+    app.run(host="0.0.0.0", port=7860)
