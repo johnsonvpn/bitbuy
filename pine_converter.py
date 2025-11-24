@@ -1,3 +1,4 @@
+# pine_converter.py（终极稳定版）
 import re
 from typing import Tuple
 
