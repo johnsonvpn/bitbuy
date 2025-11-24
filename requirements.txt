@@ -2,6 +2,4 @@ python-okx
 pandas
 requests
 flask
-ccxt
-numpy
-tenacity
+flask-cors
