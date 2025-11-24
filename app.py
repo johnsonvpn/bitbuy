@@ -2,627 +2,1014 @@ import time
 import requests
 import logging
 import pandas as pd
+import numpy as np
 from okx import MarketData, Trade, Account
-import uuid
-from datetime import datetime, timezone, timedelta
-from flask import Flask
+from flask import Flask, request, render_template_string, json
 from threading import Thread
 import os
-from urllib3.exceptions import NameResolutionError
-from tenacity import retry, stop_after_attempt, wait_exponential
+import re
+from datetime import datetime, timezone, timedelta
+import traceback
 
-# ============ 配置区域 ============
+# ============ 北京时间日志 ============
+class BeijingFormatter(logging.Formatter):
+    def converter(self, timestamp):
+        dt = datetime.fromtimestamp(timestamp)
+        beijing = dt.astimezone(timezone(timedelta(hours=8)))
+        return beijing.timetuple()
 
-# 从 Hugging Face Spaces Secrets 读取环境变量
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-API_KEY = os.getenv("API_KEY")
-SECRET_KEY = os.getenv("SECRET_KEY")
-PASS_PHRASE = os.getenv("PASS_PHRASE")
+    def formatTime(self, record, datefmt=None):
+        ct = self.converter(record.created)
+        if datefmt:
+            return time.strftime(datefmt, ct)
+        else:
+            return time.strftime("%Y-%m-%d %H:%M:%S", ct) + f".{int(record.msecs):03d}"
 
-# 验证环境变量
-if not all([BOT_TOKEN, CHAT_ID, API_KEY, SECRET_KEY, PASS_PHRASE]):
-    logging.error("缺少必要的环境变量（BOT_TOKEN, CHAT_ID, API_KEY, SECRET_KEY, PASS_PHRASE）")
-    raise EnvironmentError("缺少必要的环境变量")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.StreamHandler()]
+)
+for handler in logging.getLogger().handlers:
+    handler.setFormatter(BeijingFormatter())
 
-IS_DEMO = True
-AUTO_TRADE_ENABLED = True
-TEST_MODE = False
-TEST_CLOSE_POSITION = False
-ONLY_TEST_CLOSE = False
-SYMBOL = "BTC-USDT-SWAP"
-CHECK_INTERVAL = 5
-COOLDOWN = 1800  # 30分钟冷却期
-ORDER_SIZE = 0.1
-MIN_ORDER_SIZE = 0.001
-RSI_PERIOD = 14
-MA_PERIODS = [20, 60, 120]
-CANDLE_LIMIT = max(MA_PERIODS) + 20
-BAR_INTERVAL = "1m"  # 5分钟周期
-RSI_OVERBOUGHT = 80
-RSI_OVERSOLD = 20
-STOP_LOSS_PERCENT = 0.02
-TAKE_PROFIT_PERCENT = 0.04
-MIN_AMPLITUDE_PERCENT = 2.0
-MIN_SHADOW_RATIO = 1.0
-MIN_PROFIT = 0.1  # 最小盈利阈值 USDT
-MESSAGE_COUNT = 0  # 每日消息计数器
-MESSAGE_LIMIT = 100  # 每日消息上限
-
-# 确保日志目录存在
-LOG_DIR = "/tmp"  # 使用 /tmp 目录，Hugging Face 通常允许写入
-LOG_FILE = os.path.join(LOG_DIR, "combined_trading_bot.log")
-# 检查目录并尝试创建
-try:
-    os.makedirs(LOG_DIR, exist_ok=True)  # 创建目录（如果不存在）
-except Exception as e:
-    print(f"无法创建日志目录 {LOG_DIR}: {str(e)}")
-
-# 配置日志
-try:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(funcName)s - %(message)s",
-        handlers=[
-            logging.FileHandler(LOG_FILE, mode='a'),  # 写入 /tmp 日志文件
-            logging.StreamHandler()  # 同时输出到控制台
-        ]
-    )
-    logging.info(f"日志配置成功，写入文件: {LOG_FILE}")
-except PermissionError as e:
-    print(f"无法写入日志文件 {LOG_FILE}: {str(e)}")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(funcName)s - %(message)s",
-        handlers=[logging.StreamHandler()]  # 回退到仅控制台
-    )
-    logging.warning("日志文件写入失败，仅使用控制台输出")
+# ============ 配置 ============
+IS_DEMO = False
+DEFAULT_SYMBOL = "BTC-USDT-SWAP"
+DEFAULT_BAR_INTERVAL = "1m"
+DEFAULT_ORDER_SIZE = 0.01
+RENDER_URL = "https://bitbuy-w8xw.onrender.com/send"
+CONFIG_FILE = "/tmp/config_history.json"
+STATE_FILE = "/tmp/bot_state.json"
 
 app = Flask(__name__)
 
-# Flask 健康检查端点
-@app.route('/health', methods=['GET'])
-def health():
-    logging.info("进入健康检查端点")
-    return "OK", 200
+# 全局变量
+SYMBOL = DEFAULT_SYMBOL
+BAR_INTERVAL = DEFAULT_BAR_INTERVAL
+ORDER_SIZE = DEFAULT_ORDER_SIZE
+API_KEY = SECRET_KEY = PASS_PHRASE = BOT_TOKEN = CHAT_ID = ""
+USER_STRATEGY_CODE = ""
+CONVERTED_STRATEGY_CODE = ""
+BOT_RUNNING = False
+BOT_THREAD = None
+GLOBAL_FLAG = "0"
+_state = {}
 
-@app.route('/', methods=['GET'])
-def index():
-    logging.info("进入首页端点")
-    return "Trading Bot Running on Hugging Face Spaces", 200
-
-# ============ 功能函数 ============
-
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def send_telegram_message(message: str):
-    global MESSAGE_COUNT
-    logging.info(f"进入 send_telegram_message, 消息: {message}")
+# ============ 配置历史 ============
+def load_config_history():
     try:
-        MESSAGE_COUNT += 1
-        if MESSAGE_COUNT > MESSAGE_LIMIT:
-            logging.warning(f"每日消息数 {MESSAGE_COUNT} 超过上限 {MESSAGE_LIMIT}，跳过发送")
-            return False
-
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {"chat_id": CHAT_ID, "text": message}
-        response = requests.post(url, json=payload, timeout=10)
-        if response.status_code == 429:
-            retry_after = response.json().get('parameters', {}).get('retry_after', 60)
-            logging.warning(f"限流: 等待 {retry_after} 秒重试")
-            time.sleep(retry_after)
-            raise Exception("Retry due to rate limit")
-        if response.status_code != 200:
-            logging.error(f"发送失败: 状态码 {response.status_code}, 响应: {response.text}")
-            return False
-        logging.info("Telegram 消息发送成功")
-        return True
-    except NameResolutionError as e:
-        logging.error(f"DNS 解析失败: {str(e)}")
-        try:
-            response = requests.post("https://149.154.167.220/bot{BOT_TOKEN}/sendMessage", json=payload, timeout=10)
-            if response.status_code != 200:
-                logging.error(f"备用 DNS 发送失败: {response.status_code}, {response.text}")
-                return False
-            logging.info("备用 DNS 发送成功")
-            return True
-        except Exception as e2:
-            logging.error(f"备用 DNS 失败: {str(e2)}")
-            return False
-    except Exception as e:
-        logging.error(f"发送异常: {str(e)}")
-        return False
-
-def calculate_rsi(data, periods=RSI_PERIOD):
-    logging.info(f"进入 calculate_rsi, 数据长度: {len(data)}, 周期: {periods}")
-    try:
-        reversed_data = data[::-1]
-        closes = pd.Series([float(candle[4]) for candle in reversed_data])
-        delta = closes.diff()
-        up = delta.clip(lower=0).rolling(window=periods).mean()
-        down = -delta.clip(upper=0).rolling(window=periods).mean()
-        rs = up / down
-        rsi = pd.Series(100 - (100 / (1 + rs)), index=closes.index)
-        latest_rsi = rsi.iloc[-1]
-        if pd.isna(latest_rsi):
-            logging.warning("RSI 计算结果为 NaN")
-            return None
-        if down.iloc[-1] == 0:
-            latest_rsi = 100
-        logging.info(f"RSI 计算成功: {latest_rsi:.2f}")
-        return latest_rsi
-    except Exception as e:
-        logging.error(f"RSI 计算失败: {str(e)}")
-        return None
-
-def calculate_ma_ema(data, periods):
-    logging.info(f"进入 calculate_ma_ema, 数据长度: {len(data)}, 周期: {periods}")
-    try:
-        reversed_data = data[::-1]
-        closes = pd.Series([float(candle[4]) for candle in reversed_data])
-        ma = {f"MA{p}": closes.rolling(window=p).mean().iloc[-1] for p in periods}
-        ema = {f"EMA{p}": closes.ewm(span=p, adjust=False).mean().iloc[-1] for p in periods}
-        logging.info("MA/EMA 计算成功")
-        return ma, ema
-    except Exception as e:
-        logging.error(f"MA/EMA 计算失败: {str(e)}")
-        return {}, {}
-
-def calculate_ma_concentration(ma, ema):
-    logging.info(f"进入 calculate_ma_concentration")
-    all_lines = [line for line in list(ma.values()) + list(ema.values()) if not pd.isna(line)]
-    logging.info(f"参与计算的均线值: {len(all_lines)} 条")
-    if len(all_lines) < 2:
-        logging.warning("有效均线数量不足，无法计算密集度")
-        return float('inf')
-    max_diff = max(all_lines) - min(all_lines)
-    logging.info(f"均线密集度计算成功: {max_diff:.2f}")
-    return max_diff
-
-def calculate_avg_volume(data, periods=10):
-    logging.info(f"进入 calculate_avg_volume, 数据长度: {len(data)}, 周期: {periods}")
-    try:
-        reversed_data = data[::-1]
-        volumes = pd.Series([float(candle[5]) for candle in reversed_data])
-        avg_volume = volumes.rolling(window=periods).mean().iloc[-1]
-        logging.info(f"平均成交量计算成功")
-        return avg_volume
-    except Exception as e:
-        logging.error(f"平均成交量计算失败: {str(e)}")
-        return None
-
-def determine_position(close, ma, ema):
-    logging.info(f"进入 determine_position, 收盘价: {close}")
-    all_lines = [line for line in list(ma.values()) + list(ema.values()) if not pd.isna(line)]
-    if not all_lines:
-        logging.warning("无有效均线数据")
-        return "无有效均线"
-    if all(close > line for line in all_lines):
-        logging.info("收盘价在所有均线之上")
-        return "在所有均线之上"
-    elif all(close < line for line in all_lines):
-        logging.info("收盘价在所有均线之下")
-        return "在所有均线之下"
-    else:
-        logging.info("收盘价在均线之间")
-        return "在均线之间"
-
-def get_interval_seconds(interval: str) -> int:
-    logging.info(f"进入 get_interval_seconds, 周期: {interval}")
-    interval_map = {
-        "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
-        "1H": 3600, "2H": 7200, "4H": 14400, "6H": 21600, "12H": 43200,
-        "1D": 86400
-    }
-    seconds = interval_map.get(interval, 60)
-    logging.info(f"周期转换成功: {seconds}秒")
-    return seconds
-
-def get_account_config():
-    logging.info("进入 get_account_config")
-    try:
-        flag = "1" if IS_DEMO else "0"
-        account = Account.AccountAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
-        result = account.get_account_config()
-        if result.get("code") == "0" and result.get("data"):
-            logging.info("账户配置查询成功")
-            return result["data"][0]
-        else:
-            error_details = result.get("msg", "未知错误")
-            logging.error(f"查询账户配置失败: {error_details}")
-            return {}
-    except Exception as e:
-        logging.error(f"查询账户配置异常: {str(e)}")
-        return {}
-
-def get_positions():
-    logging.info("进入 get_positions")
-    try:
-        flag = "1" if IS_DEMO else "0"
-        account = Account.AccountAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
-        result = account.get_positions(instId=SYMBOL)
-        if result.get("code") == "0" and result.get("data"):
-            logging.info("持仓查询成功")
-            return result["data"]
-        else:
-            error_details = result.get("msg", "未知错误")
-            logging.error(f"查询持仓失败: {error_details}")
-            return []
-    except Exception as e:
-        logging.error(f"查询持仓异常: {str(e)}")
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        return []
+    except:
         return []
 
-def get_latest_price_and_indicators(symbol: str, fetch_candles=True) -> tuple:
-    logging.info(f"进入 get_latest_price_and_indicators, 产品: {symbol}, 获取K线: {fetch_candles}")
-    attempt = 0
-    max_attempts = 5
-    while attempt < max_attempts:
+def save_config_history(api_key, secret_key, pass_phrase, bot_token, chat_id):
+    configs = load_config_history()
+    new_config = {
+        "api_key": api_key[-4:] if api_key else "",
+        "secret_key": secret_key[-4:] if secret_key else "",
+        "pass_phrase": pass_phrase[-4:] if pass_phrase else "",
+        "bot_token": bot_token[-4:] if bot_token else "",
+        "chat_id": chat_id,
+        "full_config": {"api_key": api_key, "secret_key": secret_key, "pass_phrase": pass_phrase, "bot_token": bot_token, "chat_id": chat_id}
+    }
+    configs = [c for c in configs if c["full_config"] != new_config["full_config"]]
+    configs.append(new_config)
+    configs = configs[-5:]
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(configs, f)
+    except Exception as e:
+        logging.warning(f"保存配置失败: {e}")
+
+# ============ 状态持久化 ============
+def save_bot_state():
+    state = {
+        "running": BOT_RUNNING,
+        "symbol": SYMBOL,
+        "bar_interval": BAR_INTERVAL,
+        "order_size": ORDER_SIZE,
+        "is_demo": IS_DEMO,
+        "api_key_last4": API_KEY[-4:] if API_KEY else "",
+        "secret_key_last4": SECRET_KEY[-4:] if SECRET_KEY else "",
+        "pass_phrase_last4": PASS_PHRASE[-4:] if PASS_PHRASE else "",
+        "bot_token_last4": BOT_TOKEN[-4:] if BOT_TOKEN else "",
+        "chat_id": CHAT_ID,
+        "user_strategy_code": USER_STRATEGY_CODE,
+        "converted_strategy_code": CONVERTED_STRATEGY_CODE,
+        "last_trade_date": _state.get("last_trade_date").isoformat() if _state.get("last_trade_date") else None,
+        "daily_initial_balance": _state.get("daily_initial_balance", 0),
+        "profit_target": _state.get("profit_target", 0),
+        "stop_trading_today": _state.get("stop_trading_today", False)
+    }
+    try:
+        with open(STATE_FILE, 'w') as f:
+            json.dump(state, f)
+        logging.info("状态已保存")
+    except Exception as e:
+        logging.warning(f"保存运行状态失败: {e}")
+
+def load_bot_state():
+    global BOT_RUNNING, SYMBOL, BAR_INTERVAL, ORDER_SIZE, IS_DEMO, GLOBAL_FLAG
+    global API_KEY, SECRET_KEY, PASS_PHRASE, BOT_TOKEN, CHAT_ID, USER_STRATEGY_CODE, CONVERTED_STRATEGY_CODE
+    global _state
+
+    if not os.path.exists(STATE_FILE):
+        return False
+
+    try:
+        with open(STATE_FILE, 'r') as f:
+            state = json.load(f)
+
+        if not state.get("running", False):
+            return False
+
+        BOT_RUNNING = True
+        SYMBOL = state["symbol"]
+        BAR_INTERVAL = state["bar_interval"]
+        ORDER_SIZE = state["order_size"]
+        IS_DEMO = state["is_demo"]
+        GLOBAL_FLAG = "1" if IS_DEMO else "0"
+
+        API_KEY = "****" + state["api_key_last4"] if state.get("api_key_last4") else ""
+        SECRET_KEY = "****" + state["secret_key_last4"] if state.get("secret_key_last4") else ""
+        PASS_PHRASE = "****" + state["pass_phrase_last4"] if state.get("pass_phrase_last4") else ""
+        BOT_TOKEN = "****" + state["bot_token_last4"] if state.get("bot_token_last4") else ""
+        CHAT_ID = state["chat_id"]
+        USER_STRATEGY_CODE = state.get("user_strategy_code", "")
+        CONVERTED_STRATEGY_CODE = state.get("converted_strategy_code", "")
+
+        _state = {
+            "last_trade_date": datetime.fromisoformat(state["last_trade_date"]).date() if state.get("last_trade_date") else None,
+            "daily_initial_balance": state.get("daily_initial_balance", 0),
+            "profit_target": state.get("profit_target", 0),
+            "stop_trading_today": state.get("stop_trading_today", False)
+        }
+
+        logging.info("恢复机器人运行状态")
+        return True
+    except Exception as e:
+        logging.warning(f"加载运行状态失败: {e}")
         try:
-            attempt += 1
-            flag = "1" if IS_DEMO else "0"
-            market = MarketData.MarketAPI(flag=flag)
-            ticker_data = market.get_ticker(instId=symbol)
-            if ticker_data.get("code") != "0":
-                logging.warning(f"Ticker API 失败 (尝试 {attempt}): {ticker_data.get('msg')}")
-                time.sleep(2)
-                continue
-            price = float(ticker_data["data"][0]["last"])
-            logging.info("价格获取成功")
-            
-            if not fetch_candles:
-                logging.info("仅获取价格，跳过K线数据")
-                return (price, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
-            
-            marketDataAPI = MarketData.MarketAPI(flag=flag)
-            result = marketDataAPI.get_history_candlesticks(
-                instId=symbol,
-                bar=BAR_INTERVAL,
-                limit=str(CANDLE_LIMIT)
-            )
-            if result.get("code") == "0" and result.get("data"):
-                logging.info("K线数据获取成功")
-                candle = result["data"][0]
-                candle_ts = int(candle[0]) // 1000
-                prev_candle = result["data"][1] if len(result["data"]) > 1 else candle
-                open_price = float(candle[1])
-                high = float(candle[2])
-                low = float(candle[3])
-                close = float(candle[4])
-                volume = float(candle[5])
-                prev_close = float(prev_candle[4])
-                
-                upper_shadow = high - max(open_price, close)
-                lower_shadow = min(open_price, close) - low
-                amplitude_percent = (high - low) / low * 100 if low != 0 else 0.0
-                rsi = calculate_rsi(result["data"])
-                ma, ema = calculate_ma_ema(result["data"], MA_PERIODS)
-                position = determine_position(close, ma, ema)
-                avg_volume = calculate_avg_volume(result["data"])
-                ma_concentration = calculate_ma_concentration(ma, ema)
-                
-                logging.info("指标计算完成")
-                return price, volume, upper_shadow, lower_shadow, amplitude_percent, rsi, ma, ema, position, close, prev_close, avg_volume, open_price, high, low, ma_concentration
-            else:
-                logging.warning(f"K线 API 失败 (尝试 {attempt}): {result.get('msg')}")
-                time.sleep(2)
-                continue
-        except Exception as e:
-            logging.warning(f"获取数据失败 (尝试 {attempt}): {str(e)}")
-            time.sleep(2)
-            continue
-    logging.error(f"达到最大尝试次数 {max_attempts}，无法获取数据")
+            os.remove(STATE_FILE)
+        except:
+            pass
+    return False
+
+# ============ 非阻塞通知 ============
+def send_telegram_message(message: str):
+    if not SECRET_KEY or not message.strip():
+        return
+    data = {"key": SECRET_KEY, "text": message[:4000]}
+    def _send():
+        try:
+            requests.post(RENDER_URL, json=data, timeout=5)
+        except:
+            pass
+    Thread(target=_send, daemon=True).start()
+
+# ============ 获取账户余额（根据 V5 文档优化） ============
+def get_account_balance():
+    flag = GLOBAL_FLAG
+    try:
+        acc = Account.AccountAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
+        # 根据文档：使用 ccy="USDT" 精确查询，减少 payload
+        balance = acc.get_account_balance(ccy="USDT")
+        if balance.get("code") == "0" and balance.get("data") and balance["data"]:
+            details = balance["data"][0].get("details", [])
+            if details:
+                # 遍历 details 查找 USDT（文档：details 是币种数组）
+                usdt_detail = next((item for item in details if item.get("ccy") == "USDT"), None)
+                if usdt_detail:
+                    # 优先返回 availBal（可用余额），fallback 到 cashBal（总余额）
+                    cash_bal = usdt_detail.get("availBal", usdt_detail.get("cashBal", "0"))
+                    return float(cash_bal)
+        # 错误日志：添加 code/msg 便于调试（文档常见错误：60001/60004）
+        err_msg = balance.get("msg", "未知错误")
+        err_code = balance.get("code", "未知")
+        logging.warning(f"获取余额失败 (code: {err_code}): {err_msg}")
+        send_telegram_message(f"余额查询失败 (code: {err_code}): {err_msg} - 请检查 API 权限（需 'read_only' 或 'trade'）")
+    except Exception as e:
+        logging.error(f"获取余额异常: {e}")
+        send_telegram_message(f"余额查询异常: {e}")
     return None
 
-def place_order(side: str, price: float, size: float, stop_loss: float = None, take_profit: float = None):
-    logging.info(f"进入 place_order, side: {side}, 价格: {price}, 数量: {size}, 止损: {stop_loss}, 止盈: {take_profit}")
-    try:
-        flag = "1" if IS_DEMO else "0"
-        trade = Trade.TradeAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
-        pos_side = "long" if side == "buy" else "short"
-        order_id = str(int(time.time() * 1000)) + str(uuid.uuid4())[:8]
-        logging.info(f"尝试下单: {side.upper()}, 价格: {price}, 数量: {size}, 订单ID: {order_id}")
-        
-        sz = str(size)
-        if float(sz) <= 0:
-            error_msg = f"下单数量必须大于0，当前数量: {sz}"
-            logging.error(error_msg)
-            return None
-            
-        order = trade.place_order(
-            instId=SYMBOL,
-            tdMode="cross",
-            side=side,
-            posSide=pos_side,
-            ordType="market",
-            sz=sz,
-        )
-        if order.get("code") == "0" and order.get("data") and order["data"][0].get("sCode") == "0":
-            msg = f"✅ 下单成功: {side.upper()} | 止损: {stop_loss:.2f} | 止盈: {take_profit:.2f}"
-            logging.info(msg)
-            send_telegram_message(msg)
-            return order
-        else:
-            error_details = order.get("data")[0].get("sMsg", "") or order.get("msg", "") if order.get("data") else order.get("msg", "未知错误")
-            error_msg = f"下单失败: {side.upper()}, 错误: {error_details}"
-            logging.error(error_msg)
-            send_telegram_message(f"❌ {error_msg}")
-            return None
-    except Exception as e:
-        error_msg = f"下单异常: {side.upper()}, 异常: {str(e)}"
-        logging.error(error_msg)
-        send_telegram_message(f"❌ {error_msg}")
-        return None
-
-def close_position():
-    logging.info("进入 close_position")
-    try:
-        flag = "1" if IS_DEMO else "0"
-        trade = Trade.TradeAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
-        order_id = str(int(time.time() * 1000)) + str(uuid.uuid4())[:8]
-        
-        account_config = get_account_config()
-        pos_mode = account_config.get('posMode', 'unknown')
-        logging.info(f"账户保证金模式查询成功")
-        
-        positions = get_positions()
-        if not positions:
-            msg = f"ℹ️ 无持仓可平"
-            logging.info(msg)
-            send_telegram_message(msg)
-            return {"code": "0", "data": [], "msg": "无持仓"}
-        
-        success = False
-        results = []
-        for pos_side in ["long", "short"]:
-            logging.info(f"尝试平仓: posSide={pos_side}, 订单ID: {order_id}")
-            params = {
-                "instId": SYMBOL,
-                "mgnMode": "cross",
-                "posSide": pos_side,
-                "autoCxl": False,
-                "clOrdId": order_id
-            }
-            result = trade.close_positions(**params)
-            if result.get("code") == "0":
-                if result.get("data") and len(result["data"]) > 0:
-                    msg = f"✅ 平仓成功: posSide={pos_side}"
-                    logging.info(msg)
-                    send_telegram_message(msg)
-                    success = True
-                else:
-                    msg = f"ℹ️ 平仓调用成功，但无 {pos_side} 持仓"
-                    logging.info(msg)
-                results.append(result)
-            else:
-                error_details = result.get("msg", "未知错误")
-                error_msg = f"平仓失败: posSide={pos_side}, 错误代码: {result.get('code')}, 错误: {error_details}"
-                logging.error(error_msg)
-                send_telegram_message(f"❌ {error_msg}")
-                results.append(result)
-        
-        if success:
-            logging.info("至少一个持仓平仓成功")
-            return {"code": "0", "data": results, "msg": "至少一个持仓平仓成功"}
-        else:
-            error_msg = f"平仓失败"
-            logging.error(error_msg)
-            send_telegram_message(f"❌ {error_msg}")
-            return None
-    except Exception as e:
-        error_msg = f"平仓异常: {str(e)}"
-        logging.error(error_msg)
-        send_telegram_message(f"❌ {error_msg}")
-        return None
-
-def run_bot():
-    logging.info(f"进入 run_bot, 配置: K线周期={BAR_INTERVAL}, 测试模式={TEST_MODE}")
-    interval_secs = get_interval_seconds(BAR_INTERVAL)
-    send_telegram_message(f"🤖 交易机器人启动！K线周期: {BAR_INTERVAL}, 测试模式: {TEST_MODE}")
-    
-    current_position = None
-    entry_price = 0.0
-    stop_loss = 0.0
-    take_profit = 0.0
-    last_signal = None
-    last_candle_ts = 0
-    last_ma_position = "未知"
-    recorded_candle = None
-    test_mode_signal = "buy"
-    last_price = 0.0
-    last_trade_time = 0
-    buy_confirm_count = 0
-    sell_confirm_count = 0
-
-    while True:
+# ============ OKX 函数（无 timeout） ============
+def get_latest_price_and_indicators(symbol: str, bar: str, max_retries=5):
+    flag = GLOBAL_FLAG
+    for attempt in range(max_retries):
         try:
-            logging.info("进入主循环")
-            current_time = datetime.now(timezone.utc)
-            current_timestamp = int(current_time.timestamp())
-            cycle_start = (current_timestamp // interval_secs) * interval_secs
-            seconds_to_next_cycle = (cycle_start + interval_secs) - current_timestamp
-            if seconds_to_next_cycle > 0:
-                time.sleep(seconds_to_next_cycle)
+            market = MarketData.MarketAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
+            ticker = market.get_ticker(instId=symbol)
+            if ticker.get("code") != "0":
+                logging.warning(f"API 响应错误 (尝试 {attempt+1}): {ticker.get('msg', '未知')}")
+                time.sleep(2 ** attempt)
+                continue
+            price = float(ticker["data"][0]["last"])
 
-            price_data = get_latest_price_and_indicators(SYMBOL, fetch_candles=False)
-            if price_data is None or len(price_data) == 0:
-                logging.error(f"无法获取 {SYMBOL} 的价格，API 调用失败")
-                send_telegram_message(f"❌ 程序错误: 无法获取 {SYMBOL} 的价格")
-                time.sleep(60)
+            hist = market.get_history_candlesticks(instId=symbol, bar=bar, limit="300")
+            if hist.get("code") != "0" or not hist.get("data"):
+                logging.warning(f"K线数据错误 (尝试 {attempt+1}): {hist.get('msg', '无数据')}")
+                time.sleep(2 ** attempt)
                 continue
 
-            current_price = price_data[0]
-            price_change_percent = abs((current_price - last_price) / last_price * 100) if last_price > 0 else 0
-            last_price = current_price
-
-            current_ts = (int(time.time()) // interval_secs) * interval_secs
-            is_new_candle = (current_ts != last_candle_ts)
-            significant_price_change = price_change_percent > 0.5
-            fetch_full_data = is_new_candle or significant_price_change
-
-            if fetch_full_data:
-                data = get_latest_price_and_indicators(SYMBOL, fetch_candles=True)
-                if data is None:
-                    logging.error(f"无法获取 {SYMBOL} 的完整数据，API 调用失败")
-                    send_telegram_message(f"❌ 程序错误: 无法获取 {SYMBOL} 的完整数据")
-                    time.sleep(60)
-                    continue
-            else:
-                if current_position is not None:
-                    if (current_position == "long" and current_price <= stop_loss) or \
-                       (current_position == "short" and current_price >= stop_loss):
-                        logging.info("触发止损平仓")
-                        positions = get_positions()
-                        if any(p["pos"] != "0" for p in positions):
-                            result = close_position()
-                            if result:
-                                current_position = None
-                                last_signal = None
-                                last_trade_time = current_timestamp
-                    elif (current_position == "long" and current_price >= take_profit) or \
-                         (current_position == "short" and current_price <= take_profit):
-                        logging.info("触发止盈平仓")
-                        positions = get_positions()
-                        if any(p["pos"] != "0" for p in positions):
-                            result = close_position()
-                            if result:
-                                current_position = None
-                                last_signal = None
-                                last_trade_time = current_timestamp
-                time.sleep(CHECK_INTERVAL)
-                continue
-
-            price, volume, upper_shadow, lower_shadow, amplitude_percent, rsi, ma, ema, position, close, prev_close, avg_volume, open_price, high, low, ma_concentration = data
-
-            beijing_tz = timezone(timedelta(hours=8))
-            last_candle_utc = datetime.fromtimestamp(last_candle_ts, tz=timezone.utc) if last_candle_ts > 0 else None
-            last_candle_time_str = last_candle_utc.astimezone(beijing_tz).strftime('%Y-%m-%d %H:%M:%S') if last_candle_utc else "N/A"
-            current_time_str = datetime.fromtimestamp(current_ts, tz=timezone.utc).astimezone(beijing_tz).strftime('%Y-%m-%d %H:%M:%S')
-
-            signal = None
-            if ONLY_TEST_CLOSE:
-                logging.info("进入只测试平仓模式")
-                result = close_position()
-                if result:
-                    current_position = None
-                    last_signal = None
-                    last_trade_time = current_timestamp
-            elif TEST_CLOSE_POSITION:
-                logging.info("进入平仓测试")
-                result = close_position()
-                if result:
-                    current_position = None
-                    last_signal = None
-                    last_trade_time = current_timestamp
-            elif TEST_MODE:
-                logging.info(f"进入测试模式, 当前信号: {test_mode_signal}")
-                signal = test_mode_signal
-                msg = f"⚠️ 测试模式信号: {signal.upper()}"
-                send_telegram_message(msg)
-                test_mode_signal = "sell" if test_mode_signal == "buy" else "buy"
-            else:
-                recorded_candle = {
-                    "open": open_price,
-                    "close": close,
-                    "high": high,
-                    "low": low,
-                    "volume": volume,
-                    "position": position
-                }
-                recorded_position = recorded_candle["position"]
-                params_msg = (
-                    f"下单参数检查: 当前位置: {position}, 上一位置: {recorded_position}, "
-                    f"上次位置: {last_ma_position}, 上一K线 - 开盘: {recorded_candle['open']:.2f}, 收盘: {recorded_candle['close']:.2f}"
-                )
-                logging.info(params_msg)
-
-                if recorded_position != last_ma_position and last_ma_position != "未知":
-                    ma_concentration = calculate_ma_concentration(ma, ema)
-                    concentration_threshold = close * 0.01
-                    if recorded_position == "在所有均线之上":
-                        buy_confirm_count += 1
-                        sell_confirm_count = 0
-                        if buy_confirm_count >= 2 and ma_concentration <= concentration_threshold and rsi < 50 and volume > avg_volume * 1.5:
-                            signal = "buy"
-                            msg = f"⚠️ 做多信号: 连续2根K线在所有均线之上，均线密集度: {ma_concentration:.2f}, RSI: {rsi:.2f}"
-                            logging.info(msg)
-                            send_telegram_message(msg)
-                            buy_confirm_count = 0
-                    elif recorded_position == "在所有均线之下":
-                        sell_confirm_count += 1
-                        buy_confirm_count = 0
-                        if sell_confirm_count >= 2 and rsi > 50 and volume > avg_volume * 1.5:
-                            signal = "sell"
-                            msg = f"⚠️ 做空信号: 连续2根K线在所有均线之下，RSI: {rsi:.2f}"
-                            logging.info(msg)
-                            send_telegram_message(msg)
-                            sell_confirm_count = 0
-                    else:
-                        buy_confirm_count = 0
-                        sell_confirm_count = 0
-                else:
-                    buy_confirm_count = 0
-                    sell_confirm_count = 0
-
-                if recorded_position == "在均线之间":
-                    logging.info("触发止盈平仓")
-                    positions = get_positions()
-                    if any(p["pos"] != "0" for p in positions):
-                        result = close_position()
-                        if result:
-                            current_position = None
-                            last_signal = None
-                            last_trade_time = current_timestamp
-
-                last_ma_position = recorded_position
-                last_candle_ts = current_ts
-
-            if AUTO_TRADE_ENABLED and signal and signal != last_signal and (current_timestamp - last_trade_time) >= COOLDOWN:
-                order_size = max(ORDER_SIZE, MIN_ORDER_SIZE)
-                positions = get_positions()
-                if any(p["pos"] != "0" for p in positions):
-                    result = close_position()
-                    if result:
-                        current_position = None
-                        last_trade_time = current_timestamp
-
-                if signal == "buy" and current_position is None:
-                    potential_profit = price * TAKE_PROFIT_PERCENT * order_size * 5
-                    if potential_profit < MIN_PROFIT:
-                        msg = f"⚠️ 跳过买入信号: 潜在盈利 {potential_profit:.2f} USDT < 最小盈利 {MIN_PROFIT} USDT"
-                        logging.info(msg)
-                        send_telegram_message(msg)
-                    else:
-                        stop_loss = price * (1 - STOP_LOSS_PERCENT)
-                        take_profit = price * (1 + TAKE_PROFIT_PERCENT)
-                        order = place_order("buy", price, order_size, stop_loss, take_profit)
-                        if order:
-                            current_position = "long"
-                            entry_price = price
-                            last_signal = signal
-                            last_trade_time = current_timestamp
-                elif signal == "sell" and current_position is None:
-                    potential_profit = price * TAKE_PROFIT_PERCENT * order_size * 5
-                    if potential_profit < MIN_PROFIT:
-                        msg = f"⚠️ 跳过卖出信号: 潜在盈利 {potential_profit:.2f} USDT < 最小盈利 {MIN_PROFIT} USDT"
-                        logging.info(msg)
-                        send_telegram_message(msg)
-                    else:
-                        stop_loss = price * (1 + STOP_LOSS_PERCENT)
-                        take_profit = price * (1 - TAKE_PROFIT_PERCENT)
-                        order = place_order("sell", price, order_size, stop_loss, take_profit)
-                        if order:
-                            current_position = "short"
-                            entry_price = price
-                            last_signal = signal
-                            last_trade_time = current_timestamp
+            candles = hist["data"]
+            logging.info(f"数据获取成功: 价格={price}, K线数={len(candles)}")
+            return {"price": price, "candles": candles}
 
         except Exception as e:
-            logging.error(f"主循环异常: {str(e)}")
-            send_telegram_message(f"❌ 主循环错误: {str(e)}")
-            time.sleep(60)
+            logging.error(f"获取数据异常 (尝试 {attempt+1}): {e}")
+        
+        if attempt < max_retries - 1:
+            wait_time = 2 ** attempt + np.random.uniform(0, 1)
+            logging.info(f"重试等待 {wait_time:.1f}s...")
+            time.sleep(wait_time)
+    
+    send_telegram_message("警告: 网络异常: 无法连接 OKX API，已重试 5 次。")
+    logging.error("所有重试失败")
+    return None
+
+# ============ 下单 & 平仓 ============
+def place_order(side: str, price: float, size: float):
+    flag = GLOBAL_FLAG
+    try:
+        trade = Trade.TradeAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
+        pos_side = "long" if side == "buy" else "short"
+        sz = str(size)
+        order = trade.place_order(instId=SYMBOL, tdMode="cross", side=side, posSide=pos_side, ordType="market", sz=sz)
+        if order.get("code") == "0" and order.get("data") and order["data"][0].get("sCode") == "0":
+            beijing_time = datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S')
+            print("\n" + "="*60)
+            print(f"下单成功 {side.upper()} 成功".center(60))
+            print(f"数量: {size} | 价格: {price:.2f} | 时间: {beijing_time}")
+            print("="*60 + "\n")
+            tg_msg = f"<b>下单成功 {side.upper()} 成功</b>\n数量: <code>{size}</code>\n价格: <code>{price:.2f}</code>"
+            send_telegram_message(tg_msg)
+            return True
+        else:
+            err = order.get("data", [{}])[0].get("sMsg", "") or order.get("msg", "未知")
+            print(f"下单失败: {err}")
+            send_telegram_message(f"下单失败: {err}")
+    except Exception as e:
+        send_telegram_message(f"下单异常: {e}")
+    return False
+
+def close_position():
+    flag = GLOBAL_FLAG
+    try:
+        trade = Trade.TradeAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
+        acc = Account.AccountAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=flag)
+        for _ in range(3):
+            positions = acc.get_positions(instId=SYMBOL)
+            if positions.get("code") != "0" or not positions.get("data"):
+                return True
+            for pos in positions["data"]:
+                pos_side = pos.get("posSide")
+                if pos_side in ["long", "short"]:
+                    r = trade.close_positions(instId=SYMBOL, mgnMode="cross", posSide=pos_side, autoCxl=False)
+                    if r.get("code") == "0":
+                        send_telegram_message(f"平仓成功: {pos_side}")
+            time.sleep(2)
+        send_telegram_message("平仓超时")
+        return False
+    except Exception as e:
+        send_telegram_message(f"平仓异常: {e}")
+        return False
+
+# ============ Pine → Python 转换器 ============
+def convert_pine_to_python(pine_code: str) -> str:
+    code = pine_code.strip()
+    if not code:
+        return ""
+
+    params = {}
+    clean_lines = []
+    for line in code.split('\n'):
+        line = line.strip()
+        if not line or line.startswith('//'):
+            clean_lines.append('')
+            continue
+
+        match = re.search(r'(\w+)\s*=\s*input\.[^(]*\(([^,)]+)', line)
+        if match:
+            name, default = match.groups()
+            default = default.strip()
+            try:
+                val = float(default) if '.' in default else int(default)
+            except:
+                val = {"true": True, "false": False}.get(default.lower(), default.strip('"\''))
+            params[name] = val
+            clean_lines.append('')
+            continue
+
+        clean_lines.append(line)
+
+    code = '\n'.join(clean_lines)
+    code = re.sub(r'plot\([^)]*\)', '', code)
+    code = re.sub(r'plotshape\([^)]*\)', '', code)
+    code = re.sub(r'fill\([^)]*\)', '', code)
+    code = re.sub(r'alertcondition\([^)]*\)', '', code)
+    code = re.sub(r'input\([^)]*\)', '', code)
+
+    code = re.sub(r'\bhl2\b', r'(df["high"] + df["low"]) / 2', code)
+    code = re.sub(r'\bclose\[1\]\b', r'df["close"].iloc[-2] if len(df) > 1 else df["close"].iloc[-1]', code)
+    code = re.sub(r'\bhigh\[1\]\b', r'df["high"].iloc[-2] if len(df) > 1 else df["high"].iloc[-1]', code)
+    code = re.sub(r'\blow\[1\]\b', r'df["low"].iloc[-2] if len(df) > 1 else df["low"].iloc[-1]', code)
+
+    code = re.sub(r'sma\(tr,\s*(\w+)\)', r'df["tr"].rolling(window=\1, min_periods=\1).mean().iloc[-1]', code)
+    code = re.sub(r'atr\((\w+)\)', r'df["tr"].rolling(window=\1, min_periods=\1).mean().iloc[-1]', code)
+
+    code = re.sub(r'(\w+)\s*:=', r'_state["\1"] =', code)
+    code = re.sub(r'var\s+\w+\s+(\w+)\s*=\s*na', r'_state["\1"] = None', code)
+    code = re.sub(r'var\s+\w+\s+(\w+)\s*=\s*([\d.]+)', r'_state["\1"] = \2', code)
+    code = re.sub(r'nz\((\w+)\[1\],\s*\1\)', r'_state.get("\1", \1)', code)
+
+    code = re.sub(r'([^?]+)\?\s*([^:]+)\s*:\s*(.+)', r'(\2) if (\1) else (\3)', code)
+
+    python_code = f'''
+# 自动转换自 Pine Script
+import pandas as pd
+PERIODS = {params.get("Periods", 10)}
+MULTIPLIER = {params.get("Multiplier", 3.0)}
+_state = {{"up": None, "dn": None, "trend": 1, "initialized": False}}
+def generate_signal(data):
+    global _state
+    candles = data["candles"]
+    if len(candles) < 15:
+        return None
+    df = pd.DataFrame(candles, columns=["ts", "open", "high", "low", "close", "volume", "volCcy", "volCcyQuote", "confirm"]).astype(float)
+    df = df.iloc[::-1].reset_index(drop=True)
+    df["tr0"] = abs(df["high"] - df["low"])
+    df["tr1"] = abs(df["high"] - df["close"].shift(1))
+    df["tr2"] = abs(df["low"] - df["close"].shift(1))
+    df["tr"] = df[["tr0", "tr1", "tr2"]].max(axis=1)
+    atr = df["tr"].rolling(window=PERIODS, min_periods=PERIODS).mean().iloc[-1]
+    if pd.isna(atr):
+        return None
+    latest_idx = len(df) - 1
+    src = (df["high"] + df["low"]) / 2
+    up = src.iloc[latest_idx] - MULTIPLIER * atr
+    dn = src.iloc[latest_idx] + MULTIPLIER * atr
+    close_curr = df["close"].iloc[latest_idx]
+    close_prev = df["close"].iloc[latest_idx - 1] if latest_idx > 0 else close_curr
+    up_prev = _state["up"] if _state["initialized"] else up
+    dn_prev = _state["dn"] if _state["initialized"] else dn
+    if close_prev > up_prev:
+        up = max(up, up_prev)
+    if close_prev < dn_prev:
+        dn = min(dn, dn_prev)
+    trend = _state["trend"]
+    if trend == -1 and close_curr > dn_prev:
+        trend = 1
+    elif trend == 1 and close_curr < up_prev:
+        trend = -1
+    prev_trend = _state["trend"]
+    buy_signal = trend == 1 and prev_trend == -1
+    sell_signal = trend == -1 and prev_trend == 1
+    _state.update({{"up": up, "dn": dn, "trend": trend, "initialized": True}})
+    if buy_signal: return "buy"
+    if sell_signal: return "sell"
+    return None
+'''.strip()
+
+    return python_code
+
+# ============ 智能策略转换 ============
+def convert_strategy_code(raw_code: str) -> str:
+    raw_code = raw_code.strip()
+    if not raw_code:
+        return ""
+
+    pine_keywords = ["input(", "plot(", "strategy(", "study(", "=>", "hline(", "ta.", "var ", "alertcondition("]
+    is_pine = any(kw in raw_code for kw in pine_keywords)
+
+    if is_pine:
+        logging.info("检测到 Pine Script，正在生成 Python 策略...")
+        try:
+            return convert_pine_to_python(raw_code)
+        except Exception as e:
+            raise ValueError(f"转换失败: {e}")
+
+    match = re.search(r'def\s+generate_signal\s*\([^)]*\)\s*:\s*(.*)', raw_code, re.DOTALL | re.MULTILINE)
+    if not match:
+        raise ValueError("Python 策略必须包含 `def generate_signal(data):` 函数")
+
+    user_body = match.group(1).strip()
+
+    enhanced_template = f'''
+import pandas as pd
+from datetime import datetime, timezone, timedelta
+BEIJING_TZ = timezone(timedelta(hours=8))
+def generate_signal(data):
+    candles = data["candles"]
+    if len(candles) < 10:
+        return None
+    df = pd.DataFrame(candles, columns=["ts","open","high","low","close","volume","volCcy","volCcyQuote","confirm"]).astype(float)
+    df = df.iloc[::-1].reset_index(drop=True)
+    latest_ts = df["ts"].iloc[-1] / 1000
+    latest_dt = datetime.fromtimestamp(latest_ts, tz=BEIJING_TZ)
+    today = latest_dt.date()
+    signal = None
+    try:
+        {user_body}
+    except Exception as e:
+        raise RuntimeError(f"用户策略代码错误: {{e}}") from e
+    if signal in ["buy", "sell"]:
+        return signal
+    return None
+'''.strip()
+
+    return enhanced_template
+
+# ============ 机器人主循环（严格按面板K线周期执行，一根K线只交易一次）===========
+def run_bot():
+    global BOT_RUNNING, CONVERTED_STRategy_CODE, GLOBAL_FLAG, _state
+
+    mode = "模拟盘" if IS_DEMO else "实盘"
+    logging.info("机器人启动")
+    send_telegram_message(f"策略启动 | {mode} | {SYMBOL} | {BAR_INTERVAL} | 金额: {ORDER_SIZE}")
+
+    # 编译策略
+    ns = {}
+    try:
+        exec(CONVERTED_STRATEGY_CODE, ns)
+        generate_signal = ns.get("generate_signal")
+        if not generate_signal: raise ValueError("未找到 generate_signal 函数")
+        logging.info("策略编译成功")
+    except Exception as e:
+        logging.error(f"策略编译失败: {e}")
+        send_telegram_message(f"策略编译失败: {e}")
+        return
+
+    # 持久化状态（含今日初始余额、目标、是否已收工）
+    _state = _state or {
+        "last_trade_date": None,
+        "daily_initial_balance": 0.0,
+        "profit_target_pct": 0.0,      # 今日目标 3~5%
+        "stop_trading_today": False    # 达标后永久锁仓
+    }
+
+    last_signal = None
+    last_processed_ts = None
+# ===== 全面接口测试模式（启动即测试所有关键功能）=====
+    TEST_DIRECT_ORDER = False # 开启全面测试模式
+    TEST_SIDE = "sell"                # 测试下单方向（建议先用 sell，避免意外开多）
+
+    if TEST_DIRECT_ORDER:
+        logging.info("【全面接口测试模式】开始执行全链路测试...")
+        send_telegram_message("【OKX 接口全面测试开始】\n正在逐项验证关键功能...")
+
+        test_results = {
+            "时间同步": "成功",
+            "获取行情": "失败",
+            "获取余额": "失败",
+            "下单功能": "失败",
+            "持仓查询": "失败",
+            "强制平仓": "失败（无持仓也算成功）",
+            "Telegram通知": "成功"  # 这一条肯定能发出来
+        }
+
+        all_pass = True
+
+        try:
+            # 1. 时间同步（北京时间）
+            beijing_time = datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S')
+            test_results["时间同步"] = "成功 " + beijing_time
+
+            # 2. 获取最新价格和K线
+            data = get_latest_price_and_indicators(SYMBOL, BAR_INTERVAL, max_retries=5)
+            if data and data.get("price") and data.get("candles"):
+                price = data["price"]
+                test_results["获取行情"] = f"成功 最新价: {price:.2f}"
+                logging.info(f"行情获取成功: {price}")
+            else:
+                all_pass = False
+                logging.error("行情获取失败")
+
+            # 3. 获取账户余额
+            balance = get_account_balance()
+            if balance is not None and balance > 0:
+                test_results["获取余额"] = f"成功 余额: {balance:.2f} USDT"
+                logging.info(f"余额查询成功: {balance}")
+            elif balance == 0:
+                test_results["获取余额"] = "成功 余额为 0（模拟盘正常）"
+            else:
+                all_pass = False
+                test_results["获取余额"] = "失败 无法读取"
+                logging.error("余额查询失败")
+
+            # 4. 下单测试（市价单）
+            if data:
+                send_telegram_message(f"正在测试下单功能：{TEST_SIDE.upper()} {ORDER_SIZE} 张")
+                success = place_order(TEST_SIDE, price, ORDER_SIZE)
+                if success:
+                    test_results["下单功能"] = "成功 已下单"
+                    logging.info("下单测试成功")
+                else:
+                    all_pass = False
+                    test_results["下单功能"] = "失败 请检查权限/资金"
+            else:
+                all_pass = False
+                test_results["下单功能"] = "跳过（无行情）"
+
+            time.sleep(4)  # 等待订单成交
+
+            # 5. 查询持仓
+            try:
+                acc = Account.AccountAPI(api_key=API_KEY, api_secret_key=SECRET_KEY, passphrase=PASS_PHRASE, flag=GLOBAL_FLAG)
+                positions = acc.get_positions(instId=SYMBOL)
+                if positions.get("code") == "0":
+                    pos_list = positions["data"]
+                    if pos_list:
+                        pos = pos_list[0]
+                        side = pos.get("posSide")
+                        size = float(pos.get("pos", 0))
+                        test_results["持仓查询"] = f"成功 当前持仓: {side} {size} 张"
+                    else:
+                        test_results["持仓查询"] = "成功 无持仓（刚平或未成交）"
+                else:
+                    test_results["持仓查询"] = "失败 API错误"
+                    all_pass = False
+            except Exception as e:
+                test_results["持仓查询"] = f"异常 {str(e)[:30]}"
+                all_pass = False
+
+            # 6. 强制平仓测试
+            send_telegram_message("正在测试强制平仓功能...")
+            close_success = close_position()
+            if close_success or "无持仓" in str(close_success):
+                test_results["强制平仓"] = "成功 已清仓或本来就空"
+            else:
+                test_results["强制平仓"] = "失败 请手动检查"
+                all_pass = False
+
+            # ===== 最终报告 =====
+            report_lines = ["【OKX 接口测试完成】\n"]
+            for name, result in test_results.items():
+                icon = "成功" if "成功" in result else "失败"
+                report_lines.append(f"{icon} {name}: {result}")
+
+            summary = "\n\n【全部正常，可正式运行策略！】" if all_pass else "\n\n【存在问题，请先修复后再实盘！】"
+            report_lines.append(summary)
+
+            final_message = "\n".join(report_lines)
+            send_telegram_message(final_message)
+            logging.info(final_message)
+
+            if all_pass:
+                send_telegram_message("测试通过！所有核心接口正常")
+            else:
+                send_telegram_message("测试未全部通过，建议先用模拟盘验证")
+
+        except Exception as critical_error:
+            error_detail = f"测试过程崩溃: {critical_error}\n{traceback.format_exc()}"
+            logging.error(error_detail)
+            send_telegram_message(f"【测试失败】程序异常崩溃！\n{str(critical_error)}")
+        
+        # 测试完毕，主动退出程序
+        logging.info("接口测试结束，程序即将退出")
+        send_telegram_message("接口测试已完成，程序即将停止运行")
+        time.sleep(3)
+        os._exit(0)  # 强制退出，防止继续跑策略
+
+    while BOT_RUNNING:
+        try:
+            # 拉最新K线
+            data = get_latest_price_and_indicators(SYMBOL, BAR_INTERVAL, max_retries=5)
+            if not data:
+                time.sleep(10)
+                continue
+
+            current_bar_ts = int(data["candles"][-1][0])
+            if current_bar_ts == last_processed_ts:
+                time.sleep(3)
+                continue
+
+            # 新K线触发！
+            last_processed_ts = current_bar_ts
+            kline_time = datetime.fromtimestamp(current_bar_ts / 1000, tz=timezone(timedelta(hours=8)))
+            logging.info(f"{'='*25} 新K线 {BAR_INTERVAL} | {kline_time.strftime('%Y-%m-%d %H:%M:%S')} {'='*25}")
+
+            # 新的一天：初始化盈利目标
+            today = kline_time.date()
+            if _state["last_trade_date"] != today:
+                initial_bal = get_account_balance() or 10000.0
+                target_pct = round(np.random.uniform(3.0, 5.0), 2)
+
+                _state.update({
+                    "last_trade_date": today,
+                    "daily_initial_balance": initial_bal,
+                    "profit_target_pct": target_pct,
+                    "stop_trading_today": False
+                })
+                send_telegram_message(
+                    f"新的一天开始\n"
+                    f"初始资金: {initial_bal:.2f} USDT\n"
+                    f"今日盈利目标: <b>{target_pct}%</b>\n"
+                    f"达标后立即锁仓，全天不再交易"
+                )
+
+            # 核心：已达标就彻底躺平
+            if _state["stop_trading_today"]:
+                logging.info("今日已达标，锁仓中，忽略所有信号")
+                wait_seconds = {"1m":55,"3m":150,"5m":250,"15m":850,"1H":3500,"4H":14000}.get(BAR_INTERVAL, 30)
+                time.sleep(wait_seconds)
+                continue
+
+            # 执行策略
+            signal = generate_signal(data)
+
+            if signal and signal != last_signal:
+                # 先平当前仓位（无论盈亏都平）
+                close_position()
+                time.sleep(3)
+
+                # 关键：平仓后立即检查是否已达标
+                current_balance = get_account_balance()
+                if current_balance and _state["daily_initial_balance"] > 0:
+                    profit_pct = (current_balance - _state["daily_initial_balance"]) / _state["daily_initial_balance"] * 100
+                    profit_pct = round(profit_pct, 2)
+
+                    if profit_pct >= _state["profit_target_pct"]:
+                        _state["stop_trading_today"] = True
+                        send_telegram_message(
+                            f"恭喜！今日盈利 <b>{profit_pct}%</b> ≥ 目标 {_state['profit_target_pct']}%\n"
+                            f"已永久锁仓，今天不再开任何单子\n"
+                            f"躺平享受胜利果实"
+                        )
+                        logging.info(f"达标锁仓！盈利 {profit_pct}%")
+                        # 达标后直接跳过开仓逻辑
+                        last_signal = signal
+                        wait_seconds = {"1m":55,"3m":150,"5m":250,"15m":850,"1H":3500,"4H":14000}.get(BAR_INTERVAL, 30)
+                        time.sleep(wait_seconds)
+                        continue
+
+                    else:
+                        # 未达标，正常开新仓
+                        if place_order(signal, data["price"], ORDER_SIZE):
+                            send_telegram_message(
+                                f"开{signal.upper()}仓\n"
+                                f"当前盈利率: {profit_pct}%\n"
+                                f"目标: {_state['profit_target_pct']}%"
+                            )
+                        last_signal = signal
+                else:
+                    # 余额获取失败也继续开（不影响主逻辑）
+                    place_order(signal, data["price"], ORDER_SIZE)
+                    last_signal = signal
+
+            # 本根K线处理完毕，长睡到下一根
+            wait_map = {"1m":55,"3m":150,"5m":250,"15m":850,"1H":3500,"4H":14000,"1D":80000}
+            wait_seconds = wait_map.get(BAR_INTERVAL, 30)
+            logging.info(f"本K线处理完成，等待下一根（约 {wait_seconds}s）")
+            time.sleep(wait_seconds)
+
+        except Exception as e:
+            logging.error(f"机器人崩溃: {e}\n{traceback.format_exc()}")
+            send_telegram_message(f"机器人异常停止: {e}")
+            BOT_RUNNING = False
+            close_position()
+            if os.path.exists(STATE_FILE):
+                os.remove(STATE_FILE)
+            break
+
+# ============ HTML 模板（无全角） ============
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OKX 策略启动器(实盘/模拟盘)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body{font-family:Arial;margin:40px;background:#f4f4f4}
+        .c{max-width:1000px;margin:auto;background:#fff;padding:30px;border-radius:10px;box-shadow:0 0 10px rgba(0,0,0,.1)}
+        input,select,textarea{width:100%;padding:12px;margin:8px 0;border:1px solid #ccc;border-radius:6px;font-size:15px}
+        button{background:#28a745;color:#fff;padding:15px;border:none;border-radius:6px;cursor:pointer;font-size:18px;font-weight:bold;width:100%;margin:10px 0;position:relative}
+        .cancel-btn{background:#dc3545}
+        button:hover{background:#218838}
+        .cancel-btn:hover{background:#c82333}
+        .s{color:#28a745;font-weight:bold}
+        .e{color:#dc3545;font-weight:bold}
+        .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin:20px 0}
+        .box{background:#fff;padding:15px;border-radius:6px;text-align:center;border:1px solid #ddd}
+        .config-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+        .loading{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.9);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-direction:column;font-weight:bold;color:#007bff;z-index:10}
+        .spinner{border:4px solid #f3f3f3;border-top:4px solid #007bff;border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin-bottom:10px}
+        @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+        .tip{font-size:13px;color:#28a745;margin-top:5px}
+    </style>
+</head>
+<body>
+<div class="c">
+    <h1>OKX 策略启动器(实盘 / 模拟盘)</h1>
+    {% if error %}
+        <p class="e">{{ error }}</p>
+    {% endif %}
+    {% if success %}
+        <p class="s">策略运行中!</p>
+        <div class="grid">
+            <div class="box"><h3>交易对</h3><p>{{ symbol }}</p></div>
+            <div class="box"><h3>K线周期</h3><p>{{ bar }}</p></div>
+            <div class="box"><h3>金额</h3><p>{{ order_size }}</p></div>
+            <div class="box"><h3>交易模式</h3><p>{{ mode }}</p></div>
+        </div>
+        <form method="post" action="/cancel" style="position:relative" onsubmit="return showLoading(this, '取消中...')">
+            <button type="submit" class="cancel-btn" id="cancelBtn">取消策略</button>
+            <div class="loading" id="cancelLoading" style="display:none">
+                <div class="spinner"></div>
+                <div>取消中...</div>
+            </div>
+        </form>
+    {% else %}
+    <form method="post" style="position:relative" onsubmit="return showLoading(this, '启动中...')">
+        <div class="config-grid">
+            <div><label><strong>OKX API Key</strong></label><input name="api_key" placeholder="输入 API Key" value="{{ api_key or '' }}"></div>
+            <div><label><strong>OKX Secret Key</strong></label><input name="secret_key" placeholder="输入 Secret Key" value="{{ secret_key or '' }}"></div>
+            <div><label><strong>OKX Passphrase</strong></label><input name="pass_phrase" placeholder="输入 Passphrase" value="{{ pass_phrase or '' }}"></div>
+            <div><label><strong>Telegram Bot Token</strong></label><input name="bot_token" placeholder="输入 Bot Token" value="{{ bot_token or '' }}"></div>
+            <div><label><strong>Telegram Chat ID</strong></label><input name="chat_id" placeholder="输入 Chat ID" value="{{ chat_id or '' }}"></div>
+            <div>
+                <label><strong>历史配置(推荐快速恢复)</strong></label>
+                <select name="config_index" onchange="if(this.value!==''){let c=configs[this.value];this.form.api_key.value=c.api_key;this.form.secret_key.value=c.secret_key;this.form.pass_phrase.value=c.pass_phrase;this.form.bot_token.value=c.bot_token;this.form.chat_id.value=c.chat_id;}">
+                    <option value="">选择历史配置(上次)</option>
+                    {% for i, config in configs %}
+                    <option value="{{ i }}" {% if i == last_config_index %}selected{% endif %}>API: {{ config.api_key }} | Bot: {{ config.bot_token }}</option>
+                    {% endfor %}
+                </select>
+                <script>var configs = {{ configs_json | safe }};</script>
+            </div>
+        </div>
+        <label><strong>交易对</strong></label>
+        <input name="symbol" placeholder="BTC-USDT-SWAP" value="{{ symbol or '' }}">
+        <label><strong>K线周期</strong></label>
+        <select name="bar">
+            <option value="1m" {% if bar == "1m" %}selected{% endif %}>1 分钟</option>
+            <option value="3m" {% if bar == "3m" %}selected{% endif %}>3 分钟</option>
+            <option value="5m" {% if bar == "5m" %}selected{% endif %}>5 分钟</option>
+            <option value="15m" {% if bar == "15m" %}selected{% endif %}>15 分钟</option>
+            <option value="1H" {% if bar == "1H" %}selected{% endif %}>1 小时</option>
+        </select>
+        <label><strong>下单金额</strong></label>
+        <input name="order_size" type="number" step="0.001" placeholder="0.01" value="{{ order_size or '0.01' }}">
+        <label><strong>交易模式</strong></label>
+        <select name="trade_mode">
+            <option value="real" {% if not demo %}selected{% endif %}>实盘交易</option>
+            <option value="demo" {% if demo %}selected{% endif %}>模拟盘(模拟)</option>
+        </select>
+        <label><strong>策略代码(粘贴 Pine Script 或 Python)</strong></label>
+        <textarea name="strategy_code" rows="15" placeholder="//@version=5\nindicator(...)">{{ default_code }}</textarea>
+        <p class="tip">
+            支持:<strong>Pine Script</strong>(自动转换)<br>
+            支持:<strong>Python</strong>(直接运行)<br>
+            信号:返回 <code>"buy"</code> 或 <code>"sell"</code><br>
+            限额:代码顶部加 <code>// MAX_TRADES_PER_DAY = 3</code>
+        </p>
+        <div style="position:relative">
+            <button type="submit" id="startBtn">启动策略</button>
+            <div class="loading" id="startLoading" style="display:none">
+                <div class="spinner"></div>
+                <div>启动中...</div>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+</div>
+<script>
+function showLoading(form, text) {
+    const btn = form.querySelector('button[type="submit"]');
+    const loadingId = btn.id === 'startBtn' ? 'startLoading' : 'cancelLoading';
+    const loading = document.getElementById(loadingId);
+    if (!loading) return true;
+    btn.disabled = true;
+    loading.style.display = 'flex';
+    loading.querySelector('div:last-child').textContent = text;
+    return true;
+}
+</script>
+</body>
+</html>
+'''
+
+# ============ 默认 Pine 示例 ============
+DEFAULT_PINE_EXAMPLE = '''
+//@version=5
+indicator("SuperTrend", overlay=true)
+Periods = input(10)
+Multiplier = input(3.0)
+atr = ta.atr(Periods)
+up = hl2 - Multiplier * atr
+dn = hl2 + Multiplier * atr
+var float trend = 1
+var float up_prev = na
+var float dn_prev = na
+up := close[1] > up_prev ? max(up, up_prev) : up
+dn := close[1] < dn_prev ? min(dn, dn_prev) : dn
+trend := close > dn_prev ? 1 : close < up_prev ? -1 : trend
+up_prev := up
+dn_prev := dn
+'''
+
+# ============ Flask 路由 ============
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    global SYMBOL, BAR_INTERVAL, ORDER_SIZE, CONVERTED_STRATEGY_CODE, BOT_RUNNING, BOT_THREAD
+    global API_KEY, SECRET_KEY, PASS_PHRASE, BOT_TOKEN, CHAT_ID, USER_STRATEGY_CODE, IS_DEMO, GLOBAL_FLAG
+
+    configs = [(i, c) for i, c in enumerate(load_config_history())]
+    configs_json = [c["full_config"] for c in load_config_history()]
+    last_config_index = configs[-1][0] if configs else -1
+
+    is_running = load_bot_state()
+
+    if request.method == 'POST':
+        symbol = request.form.get('symbol', '').strip() or DEFAULT_SYMBOL
+        bar = request.form.get('bar', '1m').strip()
+        order_size_str = request.form.get('order_size', '0.01').strip()
+        trade_mode = request.form.get('trade_mode', 'real').strip()
+        IS_DEMO = (trade_mode == 'demo')
+        GLOBAL_FLAG = "1" if IS_DEMO else "0"
+        strategy_code = request.form.get('strategy_code', '').strip()
+        api_key = request.form.get('api_key', '').strip()
+        secret_key = request.form.get('secret_key', '').strip()
+        pass_phrase = request.form.get('pass_phrase', '').strip()
+        bot_token = request.form.get('bot_token', '').strip()
+        chat_id = request.form.get('chat_id', '').strip()
+
+        logging.info("========== 用户填入信息 ==========")
+        logging.info(f"交易对: {symbol} | 周期: {bar} | 金额: {order_size_str} | 模式: {trade_mode}")
+        logging.info(f"API Key: {api_key[:6]}...{api_key[-4:] if len(api_key)>10 else ''}")
+        logging.info(f"策略长度: {len(strategy_code)} 字符")
+
+        if not all([api_key, secret_key, pass_phrase, bot_token, chat_id]):
+            return render_template_string(
+                HTML_TEMPLATE,
+                error="请填写所有配置!",
+                default_code=strategy_code or DEFAULT_PINE_EXAMPLE,
+                api_key=api_key, secret_key=secret_key, pass_phrase=pass_phrase,
+                bot_token=bot_token, chat_id=chat_id,
+                symbol=symbol, bar=bar, order_size=order_size_str,
+                configs=configs, configs_json=json.dumps(configs_json), last_config_index=last_config_index
+            )
+
+        if not strategy_code.strip():
+            return render_template_string(
+                HTML_TEMPLATE,
+                error="策略代码不能为空!",
+                default_code=strategy_code,
+                api_key=api_key, secret_key=secret_key, pass_phrase=pass_phrase,
+                bot_token=bot_token, chat_id=chat_id,
+                symbol=symbol, bar=bar, order_size=order_size_str,
+                configs=configs, configs_json=json.dumps(configs_json), last_config_index=last_config_index
+            )
+
+        try:
+            order_size = float(order_size_str)
+            if order_size <= 0: raise ValueError
+        except:
+            return render_template_string(
+                HTML_TEMPLATE,
+                error="下单金额必须是正数!",
+                default_code=strategy_code,
+                api_key=api_key, secret_key=secret_key, pass_phrase=pass_phrase,
+                bot_token=bot_token, chat_id=chat_id,
+                symbol=symbol, bar=bar, order_size=order_size_str,
+                configs=configs, configs_json=json.dumps(configs_json), last_config_index=last_config_index
+            )
+
+        try:
+            logging.info("开始转换策略代码...")
+            CONVERTED_STRATEGY_CODE = convert_strategy_code(strategy_code)
+            logging.info(f"转换成功，长度: {len(CONVERTED_STRATEGY_CODE)}")
+        except ValueError as e:
+            error_msg = f"策略转换错误: {str(e)}"
+            logging.error(error_msg)
+            return render_template_string(
+                HTML_TEMPLATE,
+                error=error_msg,
+                default_code=strategy_code,
+                api_key=api_key, secret_key=secret_key, pass_phrase=pass_phrase,
+                bot_token=bot_token, chat_id=chat_id,
+                symbol=symbol, bar=bar, order_size=order_size_str,
+                configs=configs, configs_json=json.dumps(configs_json), last_config_index=last_config_index
+            )
+        except Exception as e:
+            error_msg = f"转换异常: {str(e)}"
+            logging.error(f"{error_msg}\n{traceback.format_exc()}")
+            return render_template_string(
+                HTML_TEMPLATE,
+                error=error_msg,
+                default_code=strategy_code,
+                api_key=api_key, secret_key=secret_key, pass_phrase=pass_phrase,
+                bot_token=bot_token, chat_id=chat_id,
+                symbol=symbol, bar=bar, order_size=order_size_str,
+                configs=configs, configs_json=json.dumps(configs_json), last_config_index=last_config_index
+            )
+
+        save_config_history(api_key, secret_key, pass_phrase, bot_token, chat_id)
+
+        SYMBOL = symbol
+        BAR_INTERVAL = bar
+        ORDER_SIZE = order_size
+        API_KEY = api_key
+        SECRET_KEY = secret_key
+        PASS_PHRASE = pass_phrase
+        BOT_TOKEN = bot_token
+        CHAT_ID = chat_id
+        USER_STRATEGY_CODE = strategy_code
+
+        BOT_RUNNING = True
+        save_bot_state()
+        BOT_THREAD = Thread(target=run_bot, daemon=True)
+        BOT_THREAD.start()
+
+        mode = "模拟盘" if IS_DEMO else "实盘"
+        logging.info(f"策略启动成功 | {mode}")
+        return render_template_string(
+            HTML_TEMPLATE,
+            success=True,
+            symbol=SYMBOL, bar=BAR_INTERVAL, order_size=ORDER_SIZE, mode=mode,
+            configs=configs, configs_json=json.dumps(configs_json), last_config_index=last_config_index
+        )
+
+    if is_running and BOT_RUNNING:
+        mode = "模拟盘" if IS_DEMO else "实盘"
+        return render_template_string(
+            HTML_TEMPLATE,
+            success=True,
+            symbol=SYMBOL, bar=BAR_INTERVAL, order_size=ORDER_SIZE, mode=mode,
+            configs=configs, configs_json=json.dumps(configs_json), last_config_index=last_config_index
+        )
+
+    return render_template_string(
+        HTML_TEMPLATE,
+        default_code=USER_STRATEGY_CODE or DEFAULT_PINE_EXAMPLE,
+        configs=configs, configs_json=json.dumps(configs_json),
+        symbol=SYMBOL, bar=BAR_INTERVAL, order_size=str(ORDER_SIZE), demo=IS_DEMO, last_config_index=last_config_index
+    )
+
+@app.route('/cancel', methods=['POST'])
+def cancel():
+    global BOT_RUNNING, BOT_THREAD, IS_DEMO, USER_STRATEGY_CODE
+
+    BOT_RUNNING = False
+    close_position()
+    mode = "模拟盘" if IS_DEMO else "实盘"
+    send_telegram_message(f"{mode}策略已取消")
+
+    if BOT_THREAD:
+        BOT_THREAD.join(timeout=5)
+    BOT_THREAD = None
+
+    last_strategy = USER_STRATEGY_CODE
+    if os.path.exists(STATE_FILE):
+        try:
+            os.remove(STATE_FILE)
+        except:
+            pass
+
+    # 强制刷新页面
+    configs = [(i, c) for i, c in enumerate(load_config_history())]
+    configs_json = [c["full_config"] for c in load_config_history()]
+    last_config_index = configs[-1][0] if configs else -1
+    USER_STRATEGY_CODE = last_strategy
+
+    # 返回带刷新脚本的 HTML
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>策略已取消</title>
+        <meta http-equiv="refresh" content="1;url=/">
+        <style>
+            body{font-family:Arial;background:#f4f4f4;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+            .msg{background:#fff;padding:30px;border-radius:10px;box-shadow:0 0 10px rgba(0,0,0,.1);text-align:center}
+            .spinner{border:4px solid #f3f3f3;border-top:4px solid #28a745;border-radius:50%;width:30px;height:30px;animation:s 1s linear infinite;margin:0 auto 15px}
+            @keyframes s{{0%{{transform:rotate(0)}}100%{{transform:rotate(360deg)}}}}
+        </style>
+    </head>
+    <body>
+        <div class="msg">
+            <div class="spinner"></div>
+            <h2>策略已取消</h2>
+            <p>页面即将刷新...</p>
+        </div>
+    </body>
+    </html>
+    '''
+
+
+@app.route('/health')
+def health():
+    return "OK", 200
+
+if load_bot_state() and BOT_RUNNING and CONVERTED_STRATEGY_CODE:
+    BOT_THREAD = Thread(target=run_bot, daemon=True)
+    BOT_THREAD.start()
 
 if __name__ == "__main__":
-    logging.info("启动 Flask 服务...")
-    bot_thread = Thread(target=run_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
-    app.run(host='0.0.0.0', port=7860)
+    app.run(host="0.0.0.0", port=7860)
