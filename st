@@ -157,13 +157,13 @@ def check_lock_profit():
             return True
     return False
 
-# ============ 核心策略（巨量假突破免疫版）===========
+# ============ 核心策略类（巨量假突破免疫版）===========
 class Strategy:
     def __init__(self):
-        self.position = None      # "buy" / "sell" / None
-        self.entry = 0
-        self.sl = 0
-        self.just_closed = False  # 关键：是否刚刚平仓
+        self.position = None        # "buy" / "sell" / None
+        self.entry = 0.0
+        self.sl = 0.0
+        self.just_closed = False    # 关键：是否刚刚平仓
 
     # 检测是否为巨量长影线陷阱K线
     def is_trap_candle(self, row):
@@ -218,7 +218,7 @@ class Strategy:
 
 strategy = Strategy()
 
-# ============ 主循环 ============
+# ============ 正确的机器人主循环（2025-12-01 实盘无敌版）===========
 def run_bot():
     global BOT_RUNNING
     load_state()
@@ -237,9 +237,9 @@ def run_bot():
                 time.sleep(10)
                 continue
 
-            cols = ["ts","open","high","low","close","volume","v1","v2","v3"]
-            df = pd.DataFrame(r["data"], columns=cols).astype(float)
-            df = df.iloc[::-1].reset_index(drop=True)  # 旧数据在前
+            df = pd.DataFrame(r["data"], columns=["ts","o","h","l","c","v","v1","v2","v3"])
+            df = df.astype({"o":float,"h":float,"l":float,"c":float,"v":float})
+            df.rename(columns={"c":"close","o":"open","h":"high","l":"low","v":"volume"}, inplace=True)
             ts = int(df["ts"].iloc[-1])
 
             if ts == last_ts:           # 防重
@@ -248,7 +248,7 @@ def run_bot():
             last_ts = ts
 
             tm = datetime.fromtimestamp(ts/1000, tz=timezone(timedelta(hours=8)))
-            logging.info(f"{'='*30} 新K线 {BAR_INTERVAL} {tm.strftime('%m-%d %H:%M')} {'='*30}")
+            logging.info(f"{'='*25} 新K线 {BAR_INTERVAL} {tm} {'='*25}")
 
             price = df['close'].iloc[-1]
             pos = get_position()
@@ -258,14 +258,13 @@ def run_bot():
                 atr_val = df['atr'].iloc[-1]
                 # 假突破快速反向 0.8×ATR 立即强平
                 if strategy.position == "buy" and price < strategy.entry - atr_val * 0.8:
-                    logging.info(f"多单假突破即时止损！价格 {price:.1f} 跌破 {strategy.entry - atr_val*0.8:.1f}")
+                    logging.info(f"多单假突破即时止损！价格 {price:.1f} 跌破保护位")
                     close_all()
                     strategy.position = None
                     time.sleep(15)
                     continue
-
                 if strategy.position == "sell" and price > strategy.entry + atr_val * 0.8:
-                    logging.info(f"空单假突破即时止损！价格 {price:.1f} 涨破 {strategy.entry + atr_val*0.8:.1f}")
+                    logging.info(f"空单假突破即时止损！价格 {price:.1f} 涨破保护位")
                     close_all()
                     strategy.position = None
                     time.sleep(15)
@@ -276,6 +275,7 @@ def run_bot():
                     close_all(); strategy.position = None
                 if strategy.position == "sell" and price >= strategy.sl:
                     close_all(); strategy.position = None
+                time.sleep(30)
                 continue
 
             # ============ 无仓：找信号 ============
@@ -296,12 +296,11 @@ def run_bot():
                         strategy.entry = price
                         atr_v = df['atr'].iloc[-1]
                         strategy.sl = price - atr_v * 1.8 if sig == "buy" else price + atr_v * 1.8
-                        strategy.just_closed = False
-                        logging.info(f"开仓{sig.upper()} 入场{price:.1f} 止损{strategy.sl:.1f}")
+                        strategy.just_closed = False   # 开新仓后清除标记
 
-            # 睡觉等下一根
+            # 睡觉到下一根
             sleep_map = {"1m":55, "3m":170, "5m":280, "15m":870, "1H":3500, "4H":14000}
-            time.sleep(sleep_map.get(BAR_INTERVAL, 60))
+            time.sleep(sleep_map.get(BAR_INTERVAL, 30))
 
         except Exception as e:
             logging.error(f"机器人异常 {e}\n{traceback.format_exc()}")
