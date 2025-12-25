@@ -14,7 +14,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 HF_SPACE_URLS = [url.strip() for url in os.getenv(
     "HF_SPACE_URLS",
-    "https://pine6-test.btc.space/"
+    "https://pine6-btc.hf.space/,https://pine6-plan.hf.space/"
 ).split(",") if url.strip()]
 
 INTERVAL = int(os.getenv("PING_INTERVAL", "900"))
