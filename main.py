@@ -1318,4 +1318,6 @@ if load_bot_state() and BOT_RUNNING and CONVERTED_STRATEGY_CODE:
     BOT_THREAD.start()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=7860)
+    import os
+    port = int(os.getenv("PORT", 7860))  # 关键：使用 Render 提供的 PORT
+    app.run(host="0.0.0.0", port=port, debug=False)
