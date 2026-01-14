@@ -1,0 +1,420 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime, timezone
+
+# ============ 策略参数 ============
+
+# MACD参数
+MACD_FAST = 12          # 快线EMA
+MACD_SLOW = 26          # 慢线EMA
+MACD_SIGNAL = 9         # 信号线
+
+# MACD信号强度阈值
+MACD_MIN_HISTOGRAM = 0.0015  # 柱状图最小值(价格的0.15%)
+MACD_ACCELERATION = True     # 是否要求MACD加速(柱状图扩大)
+
+# 成交量参数
+VOLUME_MA_PERIOD = 20        # 成交量均线周期
+VOLUME_STRONG = 2.0          # 强放量倍数
+VOLUME_MODERATE = 1.5        # 中等放量倍数
+VOLUME_MIN = 1.2             # 最低放量要求
+
+# 趋势过滤(使用更长周期MA确认大趋势)
+TREND_MA_PERIOD = 50         # 趋势均线周期
+REQUIRE_TREND_ALIGN = True   # 是否要求顺势交易
+
+# 价格动能过滤
+MIN_PRICE_MOVE = 0.3         # 最近3根K线最小涨跌幅(%)
+MAX_PRICE_MOVE = 3.0         # 最大涨跌幅，避免追高杀跌
+
+# RSI辅助过滤(避免极端区域)
+RSI_PERIOD = 14
+RSI_OVERBOUGHT = 75          # 极度超买(做多要避开)
+RSI_OVERSOLD = 25            # 极度超卖(做空要避开)
+
+# 波动率过滤
+ATR_PERIOD = 14
+MIN_ATR_PCT = 0.4            # 最小波动率(%)
+MAX_ATR_PCT = 3.0            # 最大波动率，避免剧烈震荡
+
+# 时间过滤
+AVOID_UTC_HOURS = [0, 1, 2, 3, 4, 5, 22, 23]  # 避开低流动性时段
+
+# 信号确认要求
+MIN_SIGNAL_STRENGTH = 80     # 最低信号强度(%)
+LOOKBACK_BARS = 5            # 回看K线数量，避免重复信号
+
+
+# ============ 核心策略函数 ============
+
+def generate_signal(data):
+    """
+    MACD + 放量高胜率交易策略
+    
+    核心逻辑:
+    1. MACD金叉/死叉作为主要信号
+    2. 强放量确认市场共识
+    3. 趋势过滤确保顺势而为
+    4. 多重条件降低假信号
+    5. 严格风控避免极端行情
+    
+    返回: "buy" | "sell" | None
+    """
+    
+    candles = data["candles"]
+    
+    if len(candles) < 100:  # 需要足够的历史数据
+        return None
+    
+    # ========== 数据预处理 ==========
+    df = pd.DataFrame(
+        candles,
+        columns=["ts", "open", "high", "low", "close", "volume", 
+                 "volCcy", "volCcyQuote", "confirm"]
+    ).astype(float)
+    
+    df = df.iloc[::-1].reset_index(drop=True)
+    
+    # ========== 计算技术指标 ==========
+    
+    # 1. MACD指标
+    df = calculate_macd(df)
+    
+    # 2. 成交量分析
+    df['volume_ma'] = df['volume'].rolling(window=VOLUME_MA_PERIOD).mean()
+    df['volume_ratio'] = df['volume'] / df['volume_ma']
+    
+    # 3. 趋势均线
+    df['trend_ma'] = df['close'].ewm(span=TREND_MA_PERIOD, adjust=False).mean()
+    
+    # 4. RSI
+    df['rsi'] = calculate_rsi(df['close'], RSI_PERIOD)
+    
+    # 5. ATR波动率
+    df['atr'] = calculate_atr(df, ATR_PERIOD)
+    df['atr_pct'] = df['atr'] / df['close'] * 100
+    
+    # 6. 价格动能
+    df['price_change_3'] = (df['close'] - df['close'].shift(3)) / df['close'].shift(3) * 100
+    
+    # 7. MACD柱状图变化(加速度)
+    df['histogram_change'] = df['macd_histogram'] - df['macd_histogram'].shift(1)
+    
+    # ========== 获取最新数据 ==========
+    current = df.iloc[-1]
+    prev = df.iloc[-2]
+    prev2 = df.iloc[-3]
+    
+    # ========== 基础过滤器 ==========
+    
+    # 过滤1: 时间过滤
+    current_hour = datetime.now(timezone.utc).hour
+    if current_hour in AVOID_UTC_HOURS:
+        print(f"⏰ 时间过滤: UTC {current_hour}点为低流动性时段")
+        return None
+    
+    # 过滤2: 波动率检查
+    atr_pct = current['atr_pct']
+    if atr_pct < MIN_ATR_PCT:
+        print(f"📉 波动率过低: {atr_pct:.2f}% < {MIN_ATR_PCT}%")
+        return None
+    if atr_pct > MAX_ATR_PCT:
+        print(f"📈 波动率过高: {atr_pct:.2f}% > {MAX_ATR_PCT}% (市场过于剧烈)")
+        return None
+    
+    # 过滤3: 数据完整性
+    if pd.isna([current['macd'], current['macd_signal'], current['rsi']]).any():
+        print("⚠️ 技术指标计算不完整")
+        return None
+    
+    # ========== 打印当前市场状态 ==========
+    print(f"\n{'='*80}")
+    print(f"【MACD+放量策略】{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"{'='*80}")
+    print(f"价格: ${current['close']:.2f}")
+    print(f"MACD: {current['macd']:.4f} | 信号线: {current['macd_signal']:.4f} | 柱状图: {current['macd_histogram']:.4f}")
+    print(f"趋势MA{TREND_MA_PERIOD}: ${current['trend_ma']:.2f} | 价格位置: {'上方' if current['close'] > current['trend_ma'] else '下方'}")
+    print(f"成交量: {current['volume_ratio']:.2f}x 均线 | RSI: {current['rsi']:.1f} | ATR: {atr_pct:.2f}%")
+    print(f"近3K涨跌: {current['price_change_3']:.2f}%")
+    
+    # ========== 检测MACD信号 ==========
+    
+    # MACD金叉: MACD线上穿信号线
+    macd_golden_cross = (
+        current['macd'] > current['macd_signal'] and 
+        prev['macd'] <= prev['macd_signal']
+    )
+    
+    # MACD死叉: MACD线下穿信号线
+    macd_death_cross = (
+        current['macd'] < current['macd_signal'] and 
+        prev['macd'] >= prev['macd_signal']
+    )
+    
+    # MACD零轴突破(更强信号)
+    macd_zero_cross_up = (
+        current['macd'] > 0 and prev['macd'] <= 0
+    )
+    macd_zero_cross_down = (
+        current['macd'] < 0 and prev['macd'] >= 0
+    )
+    
+    # ========== 【做多信号】 ==========
+    
+    if macd_golden_cross or macd_zero_cross_up:
+        signal_type = "MACD零轴金叉" if macd_zero_cross_up else "MACD金叉"
+        print(f"\n🟢 检测到 {signal_type}")
+        
+        # 计算MACD柱状图相对强度
+        histogram_strength = abs(current['macd_histogram']) / current['close'] * 100
+        
+        # 做多条件检查
+        conditions = {
+            "1️⃣ MACD在信号线上方": current['macd'] > current['macd_signal'],
+            
+            "2️⃣ MACD柱状图为正": current['macd_histogram'] > 0,
+            
+            "3️⃣ MACD柱状图足够强": histogram_strength >= MACD_MIN_HISTOGRAM,
+            
+            "4️⃣ MACD加速上升": current['histogram_change'] > 0 if MACD_ACCELERATION else True,
+            
+            "5️⃣ 强放量确认": current['volume_ratio'] >= VOLUME_STRONG,
+            
+            "6️⃣ 趋势对齐(价格>MA50)": (
+                current['close'] > current['trend_ma'] if REQUIRE_TREND_ALIGN else True
+            ),
+            
+            "7️⃣ RSI非极度超买": current['rsi'] < RSI_OVERBOUGHT,
+            
+            "8️⃣ 价格动能适中": (
+                MIN_PRICE_MOVE <= current['price_change_3'] <= MAX_PRICE_MOVE
+            ),
+            
+            "9️⃣ 波动率适中": MIN_ATR_PCT <= atr_pct <= MAX_ATR_PCT,
+            
+            "🔟 避免追高": current['close'] < current['high'] * 0.995,  # 不在K线最高点
+        }
+        
+        # 额外加分项
+        bonus_conditions = {
+            "➕ MACD零轴上方": current['macd'] > 0,
+            "➕ 超强放量": current['volume_ratio'] >= 2.5,
+            "➕ RSI强势区(50-65)": 50 <= current['rsi'] <= 65,
+            "➕ 连续放量": current['volume_ratio'] > prev['volume_ratio'],
+        }
+        
+        print(f"\n【做多条件检查】")
+        for name, result in conditions.items():
+            status = "✅" if result else "❌"
+            print(f"{status} {name}")
+        
+        print(f"\n【加分项】")
+        for name, result in bonus_conditions.items():
+            status = "✅" if result else "⚪"
+            print(f"{status} {name}")
+        
+        # 计算信号强度
+        base_passed = sum(conditions.values())
+        base_total = len(conditions)
+        bonus_passed = sum(bonus_conditions.values())
+        bonus_total = len(bonus_conditions)
+        
+        # 基础分80分,加分项20分
+        base_score = (base_passed / base_total) * 80
+        bonus_score = (bonus_passed / bonus_total) * 20
+        total_strength = base_score + bonus_score
+        
+        print(f"\n📊 信号评分:")
+        print(f"   基础条件: {base_passed}/{base_total} = {base_score:.0f}分")
+        print(f"   加分项: {bonus_passed}/{bonus_total} = {bonus_score:.0f}分")
+        print(f"   总分: {total_strength:.0f}分")
+        
+        # 信号强度判断
+        if total_strength >= MIN_SIGNAL_STRENGTH:
+            quality = "🔥极强" if total_strength >= 90 else "💪强" if total_strength >= 85 else "👌中等"
+            print(f"\n✅ 【做多信号确认】 信号质量: {quality} ({total_strength:.0f}分)")
+            print(f"{'='*80}\n")
+            return "buy"
+        else:
+            print(f"\n⚠️  信号强度不足: {total_strength:.0f}分 < {MIN_SIGNAL_STRENGTH}分")
+            print(f"{'='*80}\n")
+            return None
+    
+    
+    # ========== 【做空信号】 ==========
+    
+    elif macd_death_cross or macd_zero_cross_down:
+        signal_type = "MACD零轴死叉" if macd_zero_cross_down else "MACD死叉"
+        print(f"\n🔴 检测到 {signal_type}")
+        
+        # 计算MACD柱状图相对强度
+        histogram_strength = abs(current['macd_histogram']) / current['close'] * 100
+        
+        # 做空条件检查
+        conditions = {
+            "1️⃣ MACD在信号线下方": current['macd'] < current['macd_signal'],
+            
+            "2️⃣ MACD柱状图为负": current['macd_histogram'] < 0,
+            
+            "3️⃣ MACD柱状图足够强": histogram_strength >= MACD_MIN_HISTOGRAM,
+            
+            "4️⃣ MACD加速下降": current['histogram_change'] < 0 if MACD_ACCELERATION else True,
+            
+            "5️⃣ 强放量确认": current['volume_ratio'] >= VOLUME_STRONG,
+            
+            "6️⃣ 趋势对齐(价格<MA50)": (
+                current['close'] < current['trend_ma'] if REQUIRE_TREND_ALIGN else True
+            ),
+            
+            "7️⃣ RSI非极度超卖": current['rsi'] > RSI_OVERSOLD,
+            
+            "8️⃣ 价格动能适中": (
+                -MAX_PRICE_MOVE <= current['price_change_3'] <= -MIN_PRICE_MOVE
+            ),
+            
+            "9️⃣ 波动率适中": MIN_ATR_PCT <= atr_pct <= MAX_ATR_PCT,
+            
+            "🔟 避免杀跌": current['close'] > current['low'] * 1.005,  # 不在K线最低点
+        }
+        
+        # 额外加分项
+        bonus_conditions = {
+            "➕ MACD零轴下方": current['macd'] < 0,
+            "➕ 超强放量": current['volume_ratio'] >= 2.5,
+            "➕ RSI弱势区(35-50)": 35 <= current['rsi'] <= 50,
+            "➕ 连续放量": current['volume_ratio'] > prev['volume_ratio'],
+        }
+        
+        print(f"\n【做空条件检查】")
+        for name, result in conditions.items():
+            status = "✅" if result else "❌"
+            print(f"{status} {name}")
+        
+        print(f"\n【加分项】")
+        for name, result in bonus_conditions.items():
+            status = "✅" if result else "⚪"
+            print(f"{status} {name}")
+        
+        # 计算信号强度
+        base_passed = sum(conditions.values())
+        base_total = len(conditions)
+        bonus_passed = sum(bonus_conditions.values())
+        bonus_total = len(bonus_conditions)
+        
+        base_score = (base_passed / base_total) * 80
+        bonus_score = (bonus_passed / bonus_total) * 20
+        total_strength = base_score + bonus_score
+        
+        print(f"\n📊 信号评分:")
+        print(f"   基础条件: {base_passed}/{base_total} = {base_score:.0f}分")
+        print(f"   加分项: {bonus_passed}/{bonus_total} = {bonus_score:.0f}分")
+        print(f"   总分: {total_strength:.0f}分")
+        
+        # 信号强度判断
+        if total_strength >= MIN_SIGNAL_STRENGTH:
+            quality = "🔥极强" if total_strength >= 90 else "💪强" if total_strength >= 85 else "👌中等"
+            print(f"\n✅ 【做空信号确认】 信号质量: {quality} ({total_strength:.0f}分)")
+            print(f"{'='*80}\n")
+            return "sell"
+        else:
+            print(f"\n⚠️  信号强度不足: {total_strength:.0f}分 < {MIN_SIGNAL_STRENGTH}分")
+            print(f"{'='*80}\n")
+            return None
+    
+    else:
+        # 无明确交叉信号
+        macd_trend = "看涨" if current['macd'] > current['macd_signal'] else "看跌"
+        price_trend = "上升" if current['close'] > current['trend_ma'] else "下降"
+        print(f"\n📊 当前趋势: MACD {macd_trend} | 价格 {price_trend}")
+        print(f"💤 无交易信号，等待MACD交叉")
+        print(f"{'='*80}\n")
+        return None
+
+
+# ============ 辅助计算函数 ============
+
+def calculate_macd(df):
+    """
+    计算MACD指标
+    MACD = EMA12 - EMA26
+    Signal = EMA9(MACD)
+    Histogram = MACD - Signal
+    """
+    # 计算快慢EMA
+    ema_fast = df['close'].ewm(span=MACD_FAST, adjust=False).mean()
+    ema_slow = df['close'].ewm(span=MACD_SLOW, adjust=False).mean()
+    
+    # MACD线 = 快线 - 慢线
+    df['macd'] = ema_fast - ema_slow
+    
+    # 信号线 = MACD的9日EMA
+    df['macd_signal'] = df['macd'].ewm(span=MACD_SIGNAL, adjust=False).mean()
+    
+    # 柱状图 = MACD - 信号线
+    df['macd_histogram'] = df['macd'] - df['macd_signal']
+    
+    return df
+
+
+def calculate_rsi(prices, period=14):
+    """计算RSI指标"""
+    delta = prices.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    
+    avg_gain = gain.rolling(window=period, min_periods=period).mean()
+    avg_loss = loss.rolling(window=period, min_periods=period).mean()
+    
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    
+    return rsi
+
+
+def calculate_atr(df, period=14):
+    """计算ATR波动率"""
+    high = df['high']
+    low = df['low']
+    close = df['close'].shift(1)
+    
+    tr1 = high - low
+    tr2 = abs(high - close)
+    tr3 = abs(low - close)
+    
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.rolling(window=period, min_periods=period).mean()
+    
+    return atr
+
+
+# ============ 策略说明 ============
+"""
+策略核心优势:
+
+1. 【双重确认机制】
+   - MACD交叉 + 强放量 = 市场共识
+   - 避免单一指标假信号
+
+2. 【趋势过滤】
+   - 顺势交易，提高胜率
+   - MA50过滤横盘震荡
+
+3. 【严格风控】
+   - 避开极端行情(超买超卖/高波动)
+   - 时间过滤(低流动性时段)
+   - 避免追高杀跌
+
+4. 【信号评分系统】
+   - 基础条件80分 + 加分项20分
+   - 只做80分以上的高质量信号
+
+5. 【适用场景】
+   - 适合趋势明显的市场
+   - 中短期交易(15分钟-1小时周期)
+   - 流动性好的主流币种
+
+风险提示:
+- MACD是滞后指标,需配合放量确认
+- 震荡市场容易频繁交叉,需提高信号强度要求
+- 建议配合止损止盈使用
+"""
