@@ -1,2 +1,4 @@
-flask
-requests
+ccxt
+pandas
+python-dotenv
+cryptography
