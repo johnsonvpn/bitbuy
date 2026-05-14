@@ -1,4 +1,8 @@
-ccxt
+python-okx
 pandas
+requests
+flask
+flask-cors
+ccxt
 python-dotenv
 cryptography
