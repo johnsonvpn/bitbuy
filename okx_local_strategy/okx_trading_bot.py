@@ -433,9 +433,12 @@ def get_closed_30m_trend(df30m):
     latest_close_time = latest_ts + timedelta(minutes=30)
     time_until_close = (latest_close_time - now_utc()).total_seconds()
     
-    if time_until_close > 0 and time_until_close <= 300:
+    if now_utc() >= latest_close_time or time_until_close <= 3:
         idx = -1
-        log.info(f"📊 已收盘30min趋势: 使用当前柱（即将走完）")
+        if now_utc() >= latest_close_time:
+            log.info(f"📊 已收盘30min趋势: 使用当前柱（已收盘）")
+        else:
+            log.info(f"📊 已收盘30min趋势: 使用当前柱（即将收盘）")
     else:
         idx = -2
         log.info(f"📊 已收盘30min趋势: 使用前一根已收盘柱")
@@ -503,12 +506,12 @@ def check_30m_exit(df5m, df30m) -> bool:
         log.info("无持仓，跳过平仓检查")
         return False
 
-    current_30m_trend = get_macd_trend_30m(df30m)
+    closed_30m_trend = get_closed_30m_trend(df30m)
     entry_5m_dir = position_tracker.get('entry_5m_macd_direction')
     open_direction = position_tracker.get('position')
 
-    if current_30m_trend is None:
-        log.warning("无法获取当前30min MACD趋势，使用5min趋势作为兜底")
+    if closed_30m_trend is None:
+        log.warning("无法获取已收盘30min MACD趋势，使用5min趋势作为兜底")
         current_5m_trend = get_5m_current_trend(df5m)
         if current_5m_trend is None:
             log.warning("5min趋势也无法获取，跳过平仓检查")
@@ -526,17 +529,17 @@ def check_30m_exit(df5m, df30m) -> bool:
         log.warning("开仓5min方向未记录，跳过平仓检查")
         return False
 
-    log.info(f"📊 平仓检查 | 当前30min趋势={current_30m_trend} | 开仓时5min方向={entry_5m_dir}")
+    log.info(f"📊 平仓检查 | 已收盘30min趋势={closed_30m_trend} | 开仓时5min方向={entry_5m_dir}")
 
     should_close = False
-    if entry_5m_dir == 'long' and current_30m_trend == 'short':
+    if entry_5m_dir == 'long' and closed_30m_trend == 'short':
         should_close = True
-        reason = "开仓时5min=long，但当前30min=short"
-    elif entry_5m_dir == 'short' and current_30m_trend == 'long':
+        reason = "开仓时5min=long，但已收盘30min=short"
+    elif entry_5m_dir == 'short' and closed_30m_trend == 'long':
         should_close = True
-        reason = "开仓时5min=short，但当前30min=long"
+        reason = "开仓时5min=short，但已收盘30min=long"
     else:
-        reason = "30min趋势与开仓时5min方向一致，继续持仓"
+        reason = "已收盘30min趋势与开仓时5min方向一致，继续持仓"
 
     log.info(f"平仓判断: {reason}")
 
@@ -608,12 +611,13 @@ def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
                 if position_tracker.get('last_trade_loss'):
                     log.info(f"⚠️ 上次亏损，需双重确认")
                     current_30m_trend = get_macd_trend_30m(df30m)
-                    closed_30m_trend = get_closed_30m_trend(df30m)
-                    if current_30m_trend == open_signal and closed_30m_trend == open_signal:
+                    current_5m_trend = get_5m_current_trend(df5m)
+                    log.info(f"📊 双重确认 | 30min趋势={current_30m_trend} | 5min趋势={current_5m_trend}")
+                    if current_30m_trend == current_5m_trend:
                         double_confirm = True
-                        log.info(f"✅ 双重确认成功")
+                        log.info(f"✅ 双重确认成功: 30min与5min趋势一致")
                     else:
-                        log.info(f"❌ 双重确认失败")
+                        log.info(f"❌ 双重确认失败: 30min与5min趋势不一致")
                 
                 should_open = trend_confirm and (not position_tracker.get('last_trade_loss') or double_confirm)
                 
@@ -651,13 +655,13 @@ def main():
         now_cst = now_utc.astimezone(timezone(timedelta(hours=8)))
         m, s = now_cst.minute, now_cst.second
 
-        if not position_tracker.get('position') and ((m % 5 == 4 and s >= 30) or (m % 5 == 0 and s <= 10)):
+        if not position_tracker.get('position') and m % 5 == 0 and s >= 3 and s <= 8:
             if not _5m_done_ts or now_utc > _5m_done_ts + timedelta(minutes=4):
                 log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查5min开仓条件...")
                 run_strategy_check(is_29_30_check=False, is_04_30_check=True)
                 _5m_done_ts = now_utc
 
-        if position_tracker.get('position') and s >= 55 and (m % 30 == 29 or m % 30 == 59):
+        if position_tracker.get('position') and m % 30 == 0 and s >= 3 and s <= 8:
             if not _30m_done_ts or now_utc > _30m_done_ts + timedelta(minutes=29):
                 log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查30min平仓条件...")
                 run_strategy_check(is_29_30_check=True, is_04_30_check=False)

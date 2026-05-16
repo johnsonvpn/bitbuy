@@ -1,8 +1,12 @@
+<<<<<<< HEAD
+ccxt
+pandas
+python-dotenv
+cryptography
+=======
 python-okx
 pandas
 requests
 flask
 flask-cors
-ccxt
-python-dotenv
-cryptography
+>>>>>>> 2ea22653de6f506a6cd5653acdc8ceadfeff96b3

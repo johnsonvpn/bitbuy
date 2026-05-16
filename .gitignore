@@ -1,7 +1,2 @@
 .DS_Store
 combined_trading_bot.log
-okx_config.env
-.env
-*.env
-state.json
-bot.log
