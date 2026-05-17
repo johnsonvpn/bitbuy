@@ -600,39 +600,40 @@ def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
 
         if open_signal:
             if not position_status:
-                trend_confirm = False
-                if macd_30m_trend == open_signal:
-                    trend_confirm = True
-                    log.info(f"✅ 30min趋势确认: {macd_30m_trend.upper()} 与开仓方向一致")
-                else:
-                    log.info(f"❌ 30min趋势: {macd_30m_trend.upper()} 与开仓方向不一致")
+                # 确定最终开仓方向
+                final_open_signal = open_signal
                 
+                # 上次亏损时需要双重确认（先看30min趋势，再看5min趋势）
                 double_confirm = False
                 if position_tracker.get('last_trade_loss'):
                     log.info(f"⚠️ 上次亏损，需双重确认")
-                    current_30m_trend = get_macd_trend_30m(df30m)
+                    closed_30m_trend = get_closed_30m_trend(df30m)
                     current_5m_trend = get_5m_current_trend(df5m)
-                    log.info(f"📊 双重确认 | 30min趋势={current_30m_trend} | 5min趋势={current_5m_trend}")
-                    if current_30m_trend == current_5m_trend:
+                    log.info(f"📊 双重确认 | 30min趋势={closed_30m_trend} | 5min趋势={current_5m_trend}")
+                    
+                    # 双重确认逻辑：30min趋势决定开仓方向，5min趋势需要确认这个方向
+                    if closed_30m_trend == current_5m_trend:
                         double_confirm = True
-                        log.info(f"✅ 双重确认成功: 30min与5min趋势一致")
+                        # 用30min趋势作为开仓方向
+                        final_open_signal = closed_30m_trend
+                        log.info(f"✅ 双重确认成功: 使用30min趋势 {final_open_signal.upper()} 作为开仓方向")
                     else:
                         log.info(f"❌ 双重确认失败: 30min与5min趋势不一致")
                 
-                should_open = trend_confirm and (not position_tracker.get('last_trade_loss') or double_confirm)
+                # 开仓条件：上次盈利直接开仓，上次亏损需要双重确认
+                should_open = not position_tracker.get('last_trade_loss') or double_confirm
                 
                 if should_open:
                     confirm_type = "双重确认" if position_tracker.get('last_trade_loss') else "趋势确认"
-                    log.info(f"📈 反转信号: {open_signal.upper()}，{confirm_type} → 开仓")
+                    log.info(f"📈 反转信号: {final_open_signal.upper()}，{confirm_type} → 开仓")
                     if current_price:
-                        success = open_position(open_signal, current_price, open_signal)
+                        success = open_position(final_open_signal, current_price, final_open_signal)
                         if success:
-                            log.info(f"✅ 开仓完成: {open_signal.upper()} @ ${current_price:.2f}")
+                            log.info(f"✅ 开仓完成: {final_open_signal.upper()} @ ${current_price:.2f}")
                     else:
                         log.error("❌ 无法获取价格，开仓取消")
                 else:
-                    reason = "30min趋势不确认" if not trend_confirm else "双重确认失败"
-                    log.info(f"⚠️ 反转信号: {open_signal.upper()}，但{reason} → 不开仓")
+                    log.info(f"⚠️ 反转信号: {open_signal.upper()}，但双重确认失败 → 不开仓")
             else:
                 log.info(f"⚠️ 反转信号: {open_signal.upper()}，但当前有持仓({position_status}) → 不开仓")
         else:
@@ -641,8 +642,40 @@ def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
     log.info("本次检查完成\n")
 
 # ==================== 主循环 ====================
+def test_api_connection():
+    """测试API连接是否正常"""
+    log.info("🔍 测试API连接...")
+    try:
+        # 测试获取价格
+        ticker = exchange.fetch_ticker(SYMBOL)
+        price = ticker.get('last')
+        if price is None:
+            log.error("❌ API测试失败: 无法获取价格")
+            return False
+        log.info(f"✅ 价格获取成功: {SYMBOL} = {price} USDT")
+        
+        # 测试获取持仓
+        positions = exchange.fetch_positions([SYMBOL])
+        log.info(f"✅ 持仓获取成功: {len(positions)} 个持仓")
+        
+        # 测试获取账户信息
+        balance = exchange.fetch_balance()
+        usdt_balance = balance.get('USDT', {}).get('free', 0)
+        log.info(f"✅ 账户信息获取成功: USDT余额 = {usdt_balance:.2f}")
+        
+        return True
+    except Exception as e:
+        log.error(f"❌ API测试失败: {e}")
+        return False
+
 def main():
     log.info("=== OKX 本地版交易策略机器人 已启动 ===")
+    
+    # 先测试API连接
+    if not test_api_connection():
+        log.error("❌ API连接失败，退出程序")
+        exit(1)
+    
     log.info(f"标的: {SYMBOL} | 目标保证金: {TARGET_MARGIN} USDT | 杠杆: {LEVERAGE}x")
     log.info(f"入场: 5min MACD反转 @ 04:30 | 出场: 30min MACD方向不同 @ 29:55")
     log.info(f"状态已加载: position={position_tracker['position']} | last_5m={position_tracker['last_5m_macd_direction']}")
@@ -655,13 +688,15 @@ def main():
         now_cst = now_utc.astimezone(timezone(timedelta(hours=8)))
         m, s = now_cst.minute, now_cst.second
 
+        # 5min开仓检查：K线收盘后3-8秒
         if not position_tracker.get('position') and m % 5 == 0 and s >= 3 and s <= 8:
             if not _5m_done_ts or now_utc > _5m_done_ts + timedelta(minutes=4):
                 log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查5min开仓条件...")
                 run_strategy_check(is_29_30_check=False, is_04_30_check=True)
                 _5m_done_ts = now_utc
 
-        if position_tracker.get('position') and m % 30 == 0 and s >= 3 and s <= 8:
+        # 30min平仓检查：K线收盘后10-15秒（与5min检查错开）
+        if position_tracker.get('position') and m % 30 == 0 and s >= 10 and s <= 15:
             if not _30m_done_ts or now_utc > _30m_done_ts + timedelta(minutes=29):
                 log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查30min平仓条件...")
                 run_strategy_check(is_29_30_check=True, is_04_30_check=False)
