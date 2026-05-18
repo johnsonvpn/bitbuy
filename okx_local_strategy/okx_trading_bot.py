@@ -375,10 +375,10 @@ def calculate_rsi(prices, length=14):
     return rsi.values
 
 def calculate_indicators(df, timeframe, fast, slow, signal, rsi_len=9):
-    min_required = max(slow + signal, rsi_len + 1)
+    min_required = max(slow + signal, rsi_len + 1, 60)
     if len(df) < min_required:
         log.warning(f"数据点不足 [{timeframe}]: 当前{len(df)}根, 需要至少{min_required}根")
-        for col in ('macd', 'macd_signal', 'macd_hist', 'rsi'):
+        for col in ('macd', 'macd_signal', 'macd_hist', 'rsi', 'ma9', 'ma21', 'ma60', 'ema9', 'ema21', 'ema60'):
             df[col] = float('nan')
         return df
 
@@ -387,6 +387,15 @@ def calculate_indicators(df, timeframe, fast, slow, signal, rsi_len=9):
     df['macd_signal'] = signal_line
     df['macd_hist'] = histogram
     df['rsi'] = calculate_rsi(df['close'].values, rsi_len)
+    
+    # 计算MA和EMA均线
+    df['ma9'] = df['close'].rolling(window=9).mean()
+    df['ma21'] = df['close'].rolling(window=21).mean()
+    df['ma60'] = df['close'].rolling(window=60).mean()
+    df['ema9'] = df['close'].ewm(span=9, adjust=True).mean()
+    df['ema21'] = df['close'].ewm(span=21, adjust=True).mean()
+    df['ema60'] = df['close'].ewm(span=60, adjust=True).mean()
+    
     return df
 
 # ==================== MACD趋势判断 ====================
@@ -483,18 +492,49 @@ def check_5m_reversal(df5m) -> tuple[str | None, str | None]:
     if current_trend != prev_trend:
         log.info(f"⚡ 5min MACD趋势反转: {prev_trend} → {current_trend}")
         
-        if len(df5m) >= 2 and 'rsi' in df5m.columns:
-            current_rsi = df5m['rsi'].iloc[-1]
-            log.info(f"📊 当前5min RSI: {current_rsi:.2f}")
+        # 均线过滤逻辑
+        if len(df5m) >= 1 and 'ma9' in df5m.columns:
+            current_price = df5m['close'].iloc[-1]
+            ma9 = df5m['ma9'].iloc[-1]
+            ma21 = df5m['ma21'].iloc[-1]
+            ma60 = df5m['ma60'].iloc[-1]
+            ema9 = df5m['ema9'].iloc[-1]
+            ema21 = df5m['ema21'].iloc[-1]
+            ema60 = df5m['ema60'].iloc[-1]
+            
+            # 检查价格是否在所有均线之上/之下
+            above_all_ma = current_price > ma9 and current_price > ma21 and current_price > ma60
+            below_all_ma = current_price < ma9 and current_price < ma21 and current_price < ma60
+            above_all_ema = current_price > ema9 and current_price > ema21 and current_price > ema60
+            below_all_ema = current_price < ema9 and current_price < ema21 and current_price < ema60
+            
+            log.info(f"📊 当前价格: {current_price:.2f} | MA9:{ma9:.2f} MA21:{ma21:.2f} MA60:{ma60:.2f}")
+            log.info(f"📊 EMA9:{ema9:.2f} EMA21:{ema21:.2f} EMA60:{ema60:.2f}")
             
             if current_trend == 'long':
-                if current_rsi >= RSI_OVERBOUGHT:
-                    log.info(f"❌ RSI({current_rsi:.2f}) >= {RSI_OVERBOUGHT}，过滤开多信号")
-                    return None, current_trend
+                # 开多时，如果价格在所有均线上方，不需要RSI过滤
+                if above_all_ma and above_all_ema:
+                    log.info(f"✅ 价格在所有均线上方，不过滤开多信号")
+                else:
+                    # 检查RSI
+                    if len(df5m) >= 2 and 'rsi' in df5m.columns:
+                        current_rsi = df5m['rsi'].iloc[-1]
+                        log.info(f"📊 当前5min RSI: {current_rsi:.2f}")
+                        if current_rsi >= RSI_OVERBOUGHT:
+                            log.info(f"❌ RSI({current_rsi:.2f}) >= {RSI_OVERBOUGHT}，过滤开多信号")
+                            return None, current_trend
             else:
-                if current_rsi <= RSI_OVERSOLD:
-                    log.info(f"❌ RSI({current_rsi:.2f}) <= {RSI_OVERSOLD}，过滤开空信号")
-                    return None, current_trend
+                # 开空时，如果价格在所有均线下方，不需要RSI过滤
+                if below_all_ma and below_all_ema:
+                    log.info(f"✅ 价格在所有均线下方，不过滤开空信号")
+                else:
+                    # 检查RSI
+                    if len(df5m) >= 2 and 'rsi' in df5m.columns:
+                        current_rsi = df5m['rsi'].iloc[-1]
+                        log.info(f"📊 当前5min RSI: {current_rsi:.2f}")
+                        if current_rsi <= RSI_OVERSOLD:
+                            log.info(f"❌ RSI({current_rsi:.2f}) <= {RSI_OVERSOLD}，过滤开空信号")
+                            return None, current_trend
         
         return current_trend, current_trend
     else:
