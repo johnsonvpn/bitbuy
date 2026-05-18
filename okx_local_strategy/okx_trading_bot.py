@@ -589,6 +589,59 @@ def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
         if should_close:
             if close_position('30min方向与开仓时5min方向不同'):
                 position_status = None
+                # 平仓后立即检查开仓条件
+                log.info("\n[平仓后] 立即检查开仓条件...")
+                open_signal, current_5m = check_5m_reversal(df5m)
+                
+                if current_5m is not None:
+                    position_tracker['last_5m_macd_direction'] = current_5m
+                    save_state()
+
+                if open_signal:
+                    # 确定最终开仓方向
+                    final_open_signal = open_signal
+                    
+                    # 上次亏损时需要双重确认（先看30min趋势，再看5min趋势）
+                    double_confirm = False
+                    if position_tracker.get('last_trade_loss'):
+                        log.info(f"⚠️ 上次亏损，需双重确认")
+                        closed_30m_trend = get_closed_30m_trend(df30m)
+                        current_5m_trend = get_5m_current_trend(df5m)
+                        log.info(f"📊 双重确认 | 30min趋势={closed_30m_trend} | 5min趋势={current_5m_trend}")
+                        
+                        # 双重确认逻辑：30min趋势决定开仓方向，5min趋势需要确认这个方向
+                        if closed_30m_trend == current_5m_trend:
+                            double_confirm = True
+                            # 用30min趋势作为开仓方向
+                            final_open_signal = closed_30m_trend
+                            log.info(f"✅ 双重确认成功: 使用30min趋势 {final_open_signal.upper()} 作为开仓方向")
+                        else:
+                            log.info(f"❌ 双重确认失败: 30min与5min趋势不一致")
+                
+                    # 开仓条件：上次盈利直接开仓，上次亏损需要双重确认
+                    should_open = not position_tracker.get('last_trade_loss') or double_confirm
+                    
+                    if should_open:
+                        current_price = None
+                        try:
+                            ticker = exchange.fetch_ticker(SYMBOL)
+                            current_price = float(ticker['last'])
+                        except Exception as e:
+                            log.error(f"获取价格失败: {e}")
+                            
+                        confirm_type = "双重确认" if position_tracker.get('last_trade_loss') else "趋势确认"
+                        log.info(f"📈 反转信号: {final_open_signal.upper()}，{confirm_type} → 开仓")
+                        if current_price:
+                            success = open_position(final_open_signal, current_price, final_open_signal)
+                            if success:
+                                log.info(f"✅ 开仓完成: {final_open_signal.upper()} @ ${current_price:.2f}")
+                                position_status = final_open_signal
+                            else:
+                                log.error("❌ 开仓失败")
+                        else:
+                            log.error("❌ 无法获取价格，开仓取消")
+                    else:
+                        log.info(f"⚠️ 反转信号: {open_signal.upper()}，但双重确认失败 → 不开仓")
 
     if is_04_30_check and df5m is not None:
         log.info("\n[04:30] 检测5min MACD反转...")
