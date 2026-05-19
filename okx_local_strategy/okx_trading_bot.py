@@ -476,7 +476,7 @@ def get_5m_prev_trend(df5m):
     return get_macd_trend_okx(df5m, idx=-2)
 
 # ==================== 核心策略逻辑 ====================
-def check_5m_reversal(df5m) -> tuple[str | None, str | None]:
+def check_5m_reversal(df5m, df30m=None) -> tuple[str | None, str | None]:
     current_trend = get_5m_current_trend(df5m)
     prev_trend = position_tracker.get('last_5m_macd_direction')
     
@@ -492,15 +492,15 @@ def check_5m_reversal(df5m) -> tuple[str | None, str | None]:
     if current_trend != prev_trend:
         log.info(f"⚡ 5min MACD趋势反转: {prev_trend} → {current_trend}")
         
-        # 均线过滤逻辑
-        if len(df5m) >= 1 and 'ma9' in df5m.columns:
-            current_price = df5m['close'].iloc[-1]
-            ma9 = df5m['ma9'].iloc[-1]
-            ma21 = df5m['ma21'].iloc[-1]
-            ma60 = df5m['ma60'].iloc[-1]
-            ema9 = df5m['ema9'].iloc[-1]
-            ema21 = df5m['ema21'].iloc[-1]
-            ema60 = df5m['ema60'].iloc[-1]
+        # 使用30min K线判断均线位置
+        if df30m is not None and len(df30m) >= 1 and 'ma9' in df30m.columns:
+            current_price = df30m['close'].iloc[-1]
+            ma9 = df30m['ma9'].iloc[-1]
+            ma21 = df30m['ma21'].iloc[-1]
+            ma60 = df30m['ma60'].iloc[-1]
+            ema9 = df30m['ema9'].iloc[-1]
+            ema21 = df30m['ema21'].iloc[-1]
+            ema60 = df30m['ema60'].iloc[-1]
             
             # 检查价格是否在所有均线之上/之下
             above_all_ma = current_price > ma9 and current_price > ma21 and current_price > ma60
@@ -508,13 +508,23 @@ def check_5m_reversal(df5m) -> tuple[str | None, str | None]:
             above_all_ema = current_price > ema9 and current_price > ema21 and current_price > ema60
             below_all_ema = current_price < ema9 and current_price < ema21 and current_price < ema60
             
-            log.info(f"📊 当前价格: {current_price:.2f} | MA9:{ma9:.2f} MA21:{ma21:.2f} MA60:{ma60:.2f}")
-            log.info(f"📊 EMA9:{ema9:.2f} EMA21:{ema21:.2f} EMA60:{ema60:.2f}")
+            log.info(f"📊 30min 价格: {current_price:.2f} | MA9:{ma9:.2f} MA21:{ma21:.2f} MA60:{ma60:.2f}")
+            log.info(f"📊 30min EMA9:{ema9:.2f} EMA21:{ema21:.2f} EMA60:{ema60:.2f}")
+            
+            price_in_middle = not (above_all_ma and above_all_ema) and not (below_all_ma and below_all_ema)
             
             if current_trend == 'long':
                 # 开多时，如果价格在所有均线上方，不需要RSI过滤
                 if above_all_ma and above_all_ema:
-                    log.info(f"✅ 价格在所有均线上方，不过滤开多信号")
+                    log.info(f"✅ 30min价格在所有均线上方，不过滤开多信号")
+                elif price_in_middle:
+                    # 价格在均线中间，需要放量确认
+                    volume_ok = check_30m_volume(df30m)
+                    if volume_ok:
+                        log.info(f"✅ 30min价格在均线中间，但放量确认，不过滤开多信号")
+                    else:
+                        log.info(f"❌ 30min价格在均线中间，且未放量，过滤开多信号")
+                        return None, current_trend
                 else:
                     # 检查RSI
                     if len(df5m) >= 2 and 'rsi' in df5m.columns:
@@ -526,7 +536,15 @@ def check_5m_reversal(df5m) -> tuple[str | None, str | None]:
             else:
                 # 开空时，如果价格在所有均线下方，不需要RSI过滤
                 if below_all_ma and below_all_ema:
-                    log.info(f"✅ 价格在所有均线下方，不过滤开空信号")
+                    log.info(f"✅ 30min价格在所有均线下方，不过滤开空信号")
+                elif price_in_middle:
+                    # 价格在均线中间，需要放量确认
+                    volume_ok = check_30m_volume(df30m)
+                    if volume_ok:
+                        log.info(f"✅ 30min价格在均线中间，但放量确认，不过滤开空信号")
+                    else:
+                        log.info(f"❌ 30min价格在均线中间，且未放量，过滤开空信号")
+                        return None, current_trend
                 else:
                     # 检查RSI
                     if len(df5m) >= 2 and 'rsi' in df5m.columns:
@@ -540,6 +558,31 @@ def check_5m_reversal(df5m) -> tuple[str | None, str | None]:
     else:
         log.info(f"➡️  5min MACD无反转，方向持续: {current_trend}")
         return None, current_trend
+
+def check_30m_volume(df30m) -> bool:
+    """检查30min K线是否放量（当前成交量 >= 前4-5根平均的1.5-2倍）"""
+    if df30m is None or len(df30m) < 6 or 'volume' not in df30m.columns:
+        log.warning("❌ 30min数据不足，无法检查放量")
+        return False
+    
+    current_volume = df30m['volume'].iloc[-1]
+    # 计算前4-5根K线的平均成交量
+    avg_volume = df30m['volume'].iloc[-5:-1].mean()  # 取前4根
+    
+    if avg_volume == 0:
+        log.warning("❌ 平均成交量为0，无法检查放量")
+        return False
+    
+    volume_ratio = current_volume / avg_volume
+    log.info(f"📊 30min放量检查 | 当前量={current_volume:.0f} | 前4根平均={avg_volume:.0f} | 倍数={volume_ratio:.2f}x")
+    
+    # 放量为前4-5根平均的1.5-2倍
+    if volume_ratio >= 1.5 and volume_ratio <= 3.0:
+        log.info(f"✅ 放量确认 ({volume_ratio:.2f}x)")
+        return True
+    else:
+        log.info(f"❌ 未放量 ({volume_ratio:.2f}x)，需要1.5-3.0x")
+        return False
 
 def check_30m_exit(df5m, df30m) -> bool:
     if not position_tracker.get('position'):
@@ -631,7 +674,7 @@ def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
                 position_status = None
                 # 平仓后立即检查开仓条件
                 log.info("\n[平仓后] 立即检查开仓条件...")
-                open_signal, current_5m = check_5m_reversal(df5m)
+                open_signal, current_5m = check_5m_reversal(df5m, df30m)
                 
                 if current_5m is not None:
                     position_tracker['last_5m_macd_direction'] = current_5m
@@ -685,7 +728,7 @@ def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
 
     if is_04_30_check and df5m is not None:
         log.info("\n[04:30] 检测5min MACD反转...")
-        open_signal, current_5m = check_5m_reversal(df5m)
+        open_signal, current_5m = check_5m_reversal(df5m, df30m)
         
         if current_5m is not None:
             position_tracker['last_5m_macd_direction'] = current_5m
