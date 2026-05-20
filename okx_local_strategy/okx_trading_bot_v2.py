@@ -107,17 +107,22 @@ def calculate_indicators(df, timeframe):
     
     return df
 
-def fetch_klines(symbol, timeframe, limit=100):
-    """获取K线数据"""
-    try:
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.set_index('timestamp')
-        return df
-    except Exception as e:
-        log.error(f"获取K线数据失败: {e}")
-        return None
+def fetch_klines(symbol, timeframe, limit=100, retries=3):
+    """获取K线数据（带重试机制）"""
+    for attempt in range(retries):
+        try:
+            ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df = df.set_index('timestamp')
+            return df
+        except Exception as e:
+            log.warning(f"获取K线数据失败 (尝试 {attempt+1}/{retries}): {e}")
+            if attempt < retries - 1:
+                time.sleep(2)  # 等待2秒后重试
+            else:
+                log.error(f"获取K线数据最终失败: {e}")
+                return None
 
 def detect_peaks_valleys(df1h):
     """检测1h K线的波峰和波谷"""
@@ -386,8 +391,8 @@ def main():
             m = now.minute
             s = now.second
             
-            # 每小时检查一次（在整点时刻）
-            is_hourly_check = m == 0 and s >= 0 and s <= 5
+            # 每小时检查一次（在整点后10秒，与策略1错开）
+            is_hourly_check = m == 0 and s >= 10 and s <= 15
             
             if is_hourly_check:
                 # 获取1h K线
