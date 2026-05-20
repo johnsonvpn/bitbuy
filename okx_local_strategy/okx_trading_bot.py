@@ -49,6 +49,14 @@ MACD_SIGNAL     = 60
 RSI_OVERBOUGHT  = 70    # RSI超买阈值（开多信号时过滤）
 RSI_OVERSOLD    = 30    # RSI超卖阈值（开空信号时过滤）
 
+# ==================== 动态止盈止损配置 ====================
+STOP_LOSS_RATIO          = 0.02      # 止损比例 (2%)
+TAKE_PROFIT_RATIO        = 0.05      # 止盈比例 (5%)
+TRAILING_STOP_ENABLE     = True      # 是否启用移动止损
+TRAILING_STOP_RATIO      = 0.015     # 移动止损追踪比例 (1.5%)
+TRAILING_STOP_START_RATIO = 0.03     # 触发移动止损的最小盈利比例 (3%)
+TRAILING_CHECK_INTERVAL  = 5         # 移动止损检查间隔（秒）
+
 STATE_FILE      = Path('state.json')
 
 # ==================== 交易所连接 ====================
@@ -73,6 +81,12 @@ _DEFAULT_TRACKER = {
     'open_contracts':          None,
     'trade_history':           [],
     'last_trade_loss':         False,
+    # 止盈止损相关字段
+    'stop_loss_price':        None,
+    'take_profit_price':      None,
+    'trailing_stop_price':    None,
+    'max_profit_price':       None,
+    'min_profit_price':       None,
 }
 
 def _serialize(d: dict) -> dict:
@@ -179,6 +193,17 @@ def set_leverage_once():
     except Exception as e:
         log.warning(f"设置杠杆失败（可能已设置）: {e}")
 
+def calculate_stop_loss_take_profit(entry_price: float, direction: str):
+    if direction == 'long':
+        stop_loss = entry_price * (1 - STOP_LOSS_RATIO)
+        take_profit = entry_price * (1 + TAKE_PROFIT_RATIO)
+        trailing_start_price = entry_price * (1 + TRAILING_STOP_START_RATIO)
+    else:
+        stop_loss = entry_price * (1 + STOP_LOSS_RATIO)
+        take_profit = entry_price * (1 - TAKE_PROFIT_RATIO)
+        trailing_start_price = entry_price * (1 - TRAILING_STOP_START_RATIO)
+    return stop_loss, take_profit, trailing_start_price
+
 def open_position(direction: str, current_price: float, entry_5m_direction: str) -> bool:
     try:
         set_leverage_once()
@@ -198,11 +223,22 @@ def open_position(direction: str, current_price: float, entry_5m_direction: str)
         fill_price = order.get('average') or order.get('price') or current_price
         log.info(f"✅ [{cst_str()}] 开仓成功 | 成交均价: ${fill_price:.2f} | 订单ID: {order.get('id')}")
 
+        stop_loss_price, take_profit_price, _ = calculate_stop_loss_take_profit(fill_price, direction)
+        
+        log.info(f"📉 止损价: ${stop_loss_price:.4f} | 📈 止盈价: ${take_profit_price:.4f}")
+        if TRAILING_STOP_ENABLE:
+            log.info(f"🚀 移动止损已启用 | 启动盈利: {TRAILING_STOP_START_RATIO*100:.1f}% | 追踪比例: {TRAILING_STOP_RATIO*100:.1f}%")
+
         position_tracker['entry_price']             = float(fill_price)
         position_tracker['entry_time']              = now_utc()
         position_tracker['position']                = direction
         position_tracker['open_contracts']          = contracts
         position_tracker['entry_5m_macd_direction'] = entry_5m_direction
+        position_tracker['stop_loss_price']         = stop_loss_price
+        position_tracker['take_profit_price']       = take_profit_price
+        position_tracker['trailing_stop_price']     = None
+        position_tracker['max_profit_price']        = fill_price if direction == 'long' else None
+        position_tracker['min_profit_price']        = fill_price if direction == 'short' else None
         save_state()
         return True
 
@@ -241,6 +277,94 @@ def get_actual_position():
         log.warning(f"获取实际持仓失败: {e}")
         return None, None
 
+def check_stop_loss_take_profit(current_price: float) -> tuple[bool, str]:
+    position = position_tracker.get('position')
+    if not position:
+        return False, '无持仓'
+    
+    entry_price = position_tracker.get('entry_price')
+    stop_loss_price = position_tracker.get('stop_loss_price')
+    take_profit_price = position_tracker.get('take_profit_price')
+    
+    if entry_price is None:
+        return False, '未记录开仓价'
+    
+    if position == 'long':
+        if stop_loss_price is not None and current_price <= stop_loss_price:
+            return True, f'止损触发 | 当前价: ${current_price:.4f} <= 止损价: ${stop_loss_price:.4f}'
+        
+        if take_profit_price is not None and current_price >= take_profit_price:
+            return True, f'止盈触发 | 当前价: ${current_price:.4f} >= 止盈价: ${take_profit_price:.4f}'
+    else:
+        if stop_loss_price is not None and current_price >= stop_loss_price:
+            return True, f'止损触发 | 当前价: ${current_price:.4f} >= 止损价: ${stop_loss_price:.4f}'
+        
+        if take_profit_price is not None and current_price <= take_profit_price:
+            return True, f'止盈触发 | 当前价: ${current_price:.4f} <= 止盈价: ${take_profit_price:.4f}'
+    
+    return False, '未触发止盈止损'
+
+def check_trailing_stop(current_price: float) -> tuple[bool, str]:
+    if not TRAILING_STOP_ENABLE:
+        return False, '移动止损未启用'
+    
+    position = position_tracker.get('position')
+    if not position:
+        return False, '无持仓'
+    
+    entry_price = position_tracker.get('entry_price')
+    if entry_price is None:
+        return False, '未记录开仓价'
+    
+    if position == 'long':
+        max_profit_price = position_tracker.get('max_profit_price')
+        
+        if current_price > max_profit_price:
+            position_tracker['max_profit_price'] = current_price
+            new_trailing_stop = current_price * (1 - TRAILING_STOP_RATIO)
+            
+            if position_tracker['trailing_stop_price'] is None:
+                trailing_start_price = entry_price * (1 + TRAILING_STOP_START_RATIO)
+                if current_price >= trailing_start_price:
+                    position_tracker['trailing_stop_price'] = new_trailing_stop
+                    log.info(f"🚀 移动止损启动 | 当前价: ${current_price:.4f} | 止损价: ${new_trailing_stop:.4f}")
+            else:
+                if new_trailing_stop > position_tracker['trailing_stop_price']:
+                    position_tracker['trailing_stop_price'] = new_trailing_stop
+                    log.info(f"📈 移动止损上移 | 当前价: ${current_price:.4f} | 新止损价: ${new_trailing_stop:.4f}")
+            
+            save_state()
+            return False, '更新最高盈利价'
+        
+        trailing_stop_price = position_tracker.get('trailing_stop_price')
+        if trailing_stop_price is not None and current_price <= trailing_stop_price:
+            return True, f'移动止损触发 | 当前价: ${current_price:.4f} <= 止损价: ${trailing_stop_price:.4f}'
+    else:
+        min_profit_price = position_tracker.get('min_profit_price')
+        
+        if current_price < min_profit_price:
+            position_tracker['min_profit_price'] = current_price
+            new_trailing_stop = current_price * (1 + TRAILING_STOP_RATIO)
+            
+            if position_tracker['trailing_stop_price'] is None:
+                trailing_start_price = entry_price * (1 - TRAILING_STOP_START_RATIO)
+                if current_price <= trailing_start_price:
+                    position_tracker['trailing_stop_price'] = new_trailing_stop
+                    log.info(f"🚀 移动止损启动 | 当前价: ${current_price:.4f} | 止损价: ${new_trailing_stop:.4f}")
+            else:
+                if new_trailing_stop < position_tracker['trailing_stop_price']:
+                    position_tracker['trailing_stop_price'] = new_trailing_stop
+                    log.info(f"📉 移动止损下移 | 当前价: ${current_price:.4f} | 新止损价: ${new_trailing_stop:.4f}")
+            
+            save_state()
+            return False, '更新最低盈利价'
+        
+        trailing_stop_price = position_tracker.get('trailing_stop_price')
+        if trailing_stop_price is not None and current_price >= trailing_stop_price:
+            return True, f'移动止损触发 | 当前价: ${current_price:.4f} >= 止损价: ${trailing_stop_price:.4f}'
+    
+    return False, '未触发移动止损'
+
 def close_position(reason: str = '') -> bool:
     try:
         actual_direction, actual_contracts = get_actual_position()
@@ -257,6 +381,11 @@ def close_position(reason: str = '') -> bool:
                 position_tracker['position']                = None
                 position_tracker['entry_5m_macd_direction'] = None
                 position_tracker['open_contracts']          = None
+                position_tracker['stop_loss_price']         = None
+                position_tracker['take_profit_price']       = None
+                position_tracker['trailing_stop_price']     = None
+                position_tracker['max_profit_price']        = None
+                position_tracker['min_profit_price']        = None
                 save_state()
                 return True
 
@@ -338,6 +467,11 @@ def close_position(reason: str = '') -> bool:
         position_tracker['position']                = None
         position_tracker['entry_5m_macd_direction'] = None
         position_tracker['open_contracts']          = None
+        position_tracker['stop_loss_price']         = None
+        position_tracker['take_profit_price']       = None
+        position_tracker['trailing_stop_price']     = None
+        position_tracker['max_profit_price']        = None
+        position_tracker['min_profit_price']        = None
         save_state()
         return True
 
@@ -804,6 +938,28 @@ def test_api_connection():
         log.error(f"❌ API测试失败: {e}")
         return False
 
+def check_stop_loss_take_profit_loop():
+    if not position_tracker.get('position'):
+        return
+    
+    try:
+        ticker = exchange.fetch_ticker(SYMBOL)
+        current_price = float(ticker['last'])
+    except Exception as e:
+        log.error(f"获取价格失败: {e}")
+        return
+    
+    stop_triggered, stop_reason = check_stop_loss_take_profit(current_price)
+    if stop_triggered:
+        log.info(f"⚠️ [{cst_str()}] {stop_reason}")
+        close_position(stop_reason)
+        return
+    
+    trailing_triggered, trailing_reason = check_trailing_stop(current_price)
+    if trailing_triggered:
+        log.info(f"⚠️ [{cst_str()}] {trailing_reason}")
+        close_position(trailing_reason)
+
 def main():
     log.info("=== OKX 本地版交易策略机器人 已启动 ===")
     
@@ -814,10 +970,14 @@ def main():
     
     log.info(f"标的: {SYMBOL} | 目标保证金: {TARGET_MARGIN} USDT | 杠杆: {LEVERAGE}x")
     log.info(f"入场: 5min MACD反转 @ 04:30 | 出场: 30min MACD方向不同 @ 29:55")
+    log.info(f"止盈止损: 止损={STOP_LOSS_RATIO*100:.1f}% | 止盈={TAKE_PROFIT_RATIO*100:.1f}%")
+    if TRAILING_STOP_ENABLE:
+        log.info(f"移动止损: 已启用 | 启动盈利={TRAILING_STOP_START_RATIO*100:.1f}% | 追踪比例={TRAILING_STOP_RATIO*100:.1f}%")
     log.info(f"状态已加载: position={position_tracker['position']} | last_5m={position_tracker['last_5m_macd_direction']}")
 
     _5m_done_ts = None
     _30m_done_ts = None
+    _sl_done_ts = None
 
     while True:
         now_utc = datetime.now(timezone.utc)
@@ -837,6 +997,12 @@ def main():
                 log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查30min平仓条件...")
                 run_strategy_check(is_29_30_check=True, is_04_30_check=False)
                 _30m_done_ts = now_utc
+
+        # 止盈止损检查：每隔一段时间检查一次
+        if position_tracker.get('position'):
+            if not _sl_done_ts or now_utc > _sl_done_ts + timedelta(seconds=TRAILING_CHECK_INTERVAL):
+                check_stop_loss_take_profit_loop()
+                _sl_done_ts = now_utc
 
         time.sleep(1)
 
