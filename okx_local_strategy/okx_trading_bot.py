@@ -49,6 +49,27 @@ MACD_SIGNAL     = 60
 RSI_OVERBOUGHT  = 70    # RSI超买阈值（开多信号时过滤）
 RSI_OVERSOLD    = 30    # RSI超卖阈值（开空信号时过滤）
 
+# ==================== 时间周期配置 ====================
+TREND_TIMEFRAME    = '12h'   # 大趋势时间周期（用于趋势判断、平仓、过滤）
+ENTRY_TIMEFRAME    = '30m'   # 小趋势/入场时间周期（用于开仓信号）
+
+# 推荐配置组合：
+# 组合1（稳健型）：TREND_TIMEFRAME='12h', ENTRY_TIMEFRAME='30m'
+# 组合2（平衡型）：TREND_TIMEFRAME='8h', ENTRY_TIMEFRAME='15m'  
+# 组合3（激进型）：TREND_TIMEFRAME='4h', ENTRY_TIMEFRAME='5m'
+
+def parse_timeframe_minutes(timeframe: str) -> int:
+    """解析时间周期为分钟数"""
+    timeframe = timeframe.lower()
+    if timeframe.endswith('m'):
+        return int(timeframe[:-1])
+    elif timeframe.endswith('h'):
+        return int(timeframe[:-1]) * 60
+    elif timeframe.endswith('d'):
+        return int(timeframe[:-1]) * 1440
+    else:
+        return 60  # 默认1小时
+
 # ==================== 动态止盈止损配置 ====================
 STOP_LOSS_RATIO          = 0.02      # 止损比例 (2%)
 TAKE_PROFIT_RATIO        = 0.05      # 止盈比例 (5%)
@@ -73,20 +94,20 @@ exchange = ccxt.okx({
 
 # ==================== 状态持久化 ====================
 _DEFAULT_TRACKER = {
-    'entry_price':            None,
-    'entry_time':             None,
-    'position':               None,
-    'entry_5m_macd_direction': None,
-    'last_5m_macd_direction':  None,
-    'open_contracts':          None,
-    'trade_history':           [],
-    'last_trade_loss':         False,
+    'entry_price':              None,
+    'entry_time':               None,
+    'position':                 None,
+    'entry_entry_macd_direction': None,
+    'last_entry_macd_direction':  None,
+    'open_contracts':            None,
+    'trade_history':             [],
+    'last_trade_loss':           False,
     # 止盈止损相关字段
-    'stop_loss_price':        None,
-    'take_profit_price':      None,
-    'trailing_stop_price':    None,
-    'max_profit_price':       None,
-    'min_profit_price':       None,
+    'stop_loss_price':          None,
+    'take_profit_price':        None,
+    'trailing_stop_price':      None,
+    'max_profit_price':         None,
+    'min_profit_price':         None,
 }
 
 def _serialize(d: dict) -> dict:
@@ -229,16 +250,16 @@ def open_position(direction: str, current_price: float, entry_5m_direction: str)
         if TRAILING_STOP_ENABLE:
             log.info(f"🚀 移动止损已启用 | 启动盈利: {TRAILING_STOP_START_RATIO*100:.1f}% | 追踪比例: {TRAILING_STOP_RATIO*100:.1f}%")
 
-        position_tracker['entry_price']             = float(fill_price)
-        position_tracker['entry_time']              = now_utc()
-        position_tracker['position']                = direction
-        position_tracker['open_contracts']          = contracts
-        position_tracker['entry_5m_macd_direction'] = entry_5m_direction
-        position_tracker['stop_loss_price']         = stop_loss_price
-        position_tracker['take_profit_price']       = take_profit_price
-        position_tracker['trailing_stop_price']     = None
-        position_tracker['max_profit_price']        = fill_price if direction == 'long' else None
-        position_tracker['min_profit_price']        = fill_price if direction == 'short' else None
+        position_tracker['entry_price']               = float(fill_price)
+        position_tracker['entry_time']                = now_utc()
+        position_tracker['position']                  = direction
+        position_tracker['open_contracts']            = contracts
+        position_tracker['entry_entry_macd_direction'] = entry_5m_direction
+        position_tracker['stop_loss_price']           = stop_loss_price
+        position_tracker['take_profit_price']         = take_profit_price
+        position_tracker['trailing_stop_price']       = None
+        position_tracker['max_profit_price']          = fill_price if direction == 'long' else None
+        position_tracker['min_profit_price']          = fill_price if direction == 'short' else None
         save_state()
         return True
 
@@ -319,6 +340,11 @@ def check_trailing_stop(current_price: float) -> tuple[bool, str]:
     if position == 'long':
         max_profit_price = position_tracker.get('max_profit_price')
         
+        if max_profit_price is None:
+            position_tracker['max_profit_price'] = current_price
+            save_state()
+            return False, '初始化最高盈利价'
+        
         if current_price > max_profit_price:
             position_tracker['max_profit_price'] = current_price
             new_trailing_stop = current_price * (1 - TRAILING_STOP_RATIO)
@@ -341,6 +367,11 @@ def check_trailing_stop(current_price: float) -> tuple[bool, str]:
             return True, f'移动止损触发 | 当前价: ${current_price:.4f} <= 止损价: ${trailing_stop_price:.4f}'
     else:
         min_profit_price = position_tracker.get('min_profit_price')
+        
+        if min_profit_price is None:
+            position_tracker['min_profit_price'] = current_price
+            save_state()
+            return False, '初始化最低盈利价'
         
         if current_price < min_profit_price:
             position_tracker['min_profit_price'] = current_price
@@ -376,16 +407,16 @@ def close_position(reason: str = '') -> bool:
             
             if actual_direction is None or actual_contracts is None:
                 log.warning("本地也没有持仓记录")
-                position_tracker['entry_price']             = None
-                position_tracker['entry_time']              = None
-                position_tracker['position']                = None
-                position_tracker['entry_5m_macd_direction'] = None
-                position_tracker['open_contracts']          = None
-                position_tracker['stop_loss_price']         = None
-                position_tracker['take_profit_price']       = None
-                position_tracker['trailing_stop_price']     = None
-                position_tracker['max_profit_price']        = None
-                position_tracker['min_profit_price']        = None
+                position_tracker['entry_price']               = None
+                position_tracker['entry_time']                = None
+                position_tracker['position']                  = None
+                position_tracker['entry_entry_macd_direction'] = None
+                position_tracker['open_contracts']            = None
+                position_tracker['stop_loss_price']           = None
+                position_tracker['take_profit_price']         = None
+                position_tracker['trailing_stop_price']       = None
+                position_tracker['max_profit_price']          = None
+                position_tracker['min_profit_price']          = None
                 save_state()
                 return True
 
@@ -462,16 +493,16 @@ def close_position(reason: str = '') -> bool:
             if len(position_tracker['trade_history']) > 50:
                 position_tracker['trade_history'] = position_tracker['trade_history'][:50]
 
-        position_tracker['entry_price']             = None
-        position_tracker['entry_time']              = None
-        position_tracker['position']                = None
-        position_tracker['entry_5m_macd_direction'] = None
-        position_tracker['open_contracts']          = None
-        position_tracker['stop_loss_price']         = None
-        position_tracker['take_profit_price']       = None
-        position_tracker['trailing_stop_price']     = None
-        position_tracker['max_profit_price']        = None
-        position_tracker['min_profit_price']        = None
+        position_tracker['entry_price']               = None
+        position_tracker['entry_time']                = None
+        position_tracker['position']                  = None
+        position_tracker['entry_entry_macd_direction'] = None
+        position_tracker['open_contracts']            = None
+        position_tracker['stop_loss_price']           = None
+        position_tracker['take_profit_price']         = None
+        position_tracker['trailing_stop_price']       = None
+        position_tracker['max_profit_price']          = None
+        position_tracker['min_profit_price']          = None
         save_state()
         return True
 
@@ -550,91 +581,93 @@ def get_macd_trend_okx(df, idx=-1):
         return None
     return _macd_trend_from_hist(cur, prv)
 
-def get_macd_trend_30m(df30m):
-    if len(df30m) < 3:
+def get_macd_trend_trend(df, timeframe):
+    if len(df) < 3:
         return None
-    latest_close_time = df30m['timestamp'].iloc[-1] + timedelta(minutes=30)
+    tf_minutes = parse_timeframe_minutes(timeframe)
+    latest_close_time = df['timestamp'].iloc[-1] + timedelta(minutes=tf_minutes)
     time_until_close = (latest_close_time - now_utc()).total_seconds()
     if time_until_close < 300 or latest_close_time <= now_utc():
         idx = -1
     else:
         idx = -2
-    if idx == -2 and len(df30m) < 4:
+    if idx == -2 and len(df) < 4:
         return None
-    cur = df30m['macd_hist'].iloc[idx]
-    prv = df30m['macd_hist'].iloc[idx - 1]
-    log.info(f"📊 30min MACD: 当前={cur:.6f}, 前值={prv:.6f}")
+    cur = df['macd_hist'].iloc[idx]
+    prv = df['macd_hist'].iloc[idx - 1]
+    log.info(f"📊 {timeframe} MACD: 当前={cur:.6f}, 前值={prv:.6f}")
     if pd.isna(cur):
         return None
     return _macd_trend_from_hist(cur, prv)
 
-def get_closed_30m_trend(df30m):
-    if df30m is None or len(df30m) < 3:
+def get_closed_trend(df, timeframe):
+    if df is None or len(df) < 3:
         return None
     
-    latest_ts = df30m['timestamp'].iloc[-1]
-    latest_close_time = latest_ts + timedelta(minutes=30)
+    tf_minutes = parse_timeframe_minutes(timeframe)
+    latest_ts = df['timestamp'].iloc[-1]
+    latest_close_time = latest_ts + timedelta(minutes=tf_minutes)
     time_until_close = (latest_close_time - now_utc()).total_seconds()
     
     if now_utc() >= latest_close_time or time_until_close <= 3:
         idx = -1
         if now_utc() >= latest_close_time:
-            log.info(f"📊 已收盘30min趋势: 使用当前柱（已收盘）")
+            log.info(f"📊 已收盘{timeframe}趋势: 使用当前柱（已收盘）")
         else:
-            log.info(f"📊 已收盘30min趋势: 使用当前柱（即将收盘）")
+            log.info(f"📊 已收盘{timeframe}趋势: 使用当前柱（即将收盘）")
     else:
         idx = -2
-        log.info(f"📊 已收盘30min趋势: 使用前一根已收盘柱")
+        log.info(f"📊 已收盘{timeframe}趋势: 使用前一根已收盘柱")
     
-    if len(df30m) < abs(idx) + 2:
+    if len(df) < abs(idx) + 2:
         return None
     
-    cur = df30m['macd_hist'].iloc[idx]
-    prv = df30m['macd_hist'].iloc[idx - 1]
+    cur = df['macd_hist'].iloc[idx]
+    prv = df['macd_hist'].iloc[idx - 1]
     
     if pd.isna(cur):
         return None
     
     closed_trend = _macd_trend_from_hist(cur, prv)
-    log.info(f"📊 已收盘30min: hist={cur:.6f}, 前值={prv:.6f} → 趋势={closed_trend.upper()}")
+    log.info(f"📊 已收盘{timeframe}: hist={cur:.6f}, 前值={prv:.6f} → 趋势={closed_trend.upper()}")
     return closed_trend
 
-def get_5m_current_trend(df5m):
-    if len(df5m) < 2:
+def get_entry_current_trend(df):
+    if len(df) < 2:
         return None
-    return get_macd_trend_okx(df5m, idx=-1)
+    return get_macd_trend_okx(df, idx=-1)
 
-def get_5m_prev_trend(df5m):
-    if len(df5m) < 3:
+def get_entry_prev_trend(df):
+    if len(df) < 3:
         return None
-    return get_macd_trend_okx(df5m, idx=-2)
+    return get_macd_trend_okx(df, idx=-2)
 
 # ==================== 核心策略逻辑 ====================
-def check_5m_reversal(df5m, df30m=None) -> tuple[str | None, str | None]:
-    current_trend = get_5m_current_trend(df5m)
-    prev_trend = position_tracker.get('last_5m_macd_direction')
+def check_entry_reversal(df_entry, df_trend=None) -> tuple[str | None, str | None]:
+    current_trend = get_entry_current_trend(df_entry)
+    prev_trend = position_tracker.get('last_entry_macd_direction')
     
     if prev_trend is None:
-        prev_trend = get_5m_prev_trend(df5m)
+        prev_trend = get_entry_prev_trend(df_entry)
 
     if current_trend is None or prev_trend is None:
-        log.warning("无法获取5min MACD趋势")
+        log.warning(f"无法获取{ENTRY_TIMEFRAME} MACD趋势")
         return None, None
 
-    log.info(f"🔍 5min MACD | 上一柱={prev_trend} → 当前柱={current_trend}")
+    log.info(f"🔍 {ENTRY_TIMEFRAME} MACD | 上一柱={prev_trend} → 当前柱={current_trend}")
 
     if current_trend != prev_trend:
-        log.info(f"⚡ 5min MACD趋势反转: {prev_trend} → {current_trend}")
+        log.info(f"⚡ {ENTRY_TIMEFRAME} MACD趋势反转: {prev_trend} → {current_trend}")
         
-        # 使用30min K线判断均线位置
-        if df30m is not None and len(df30m) >= 1 and 'ma9' in df30m.columns:
-            current_price = df30m['close'].iloc[-1]
-            ma9 = df30m['ma9'].iloc[-1]
-            ma21 = df30m['ma21'].iloc[-1]
-            ma60 = df30m['ma60'].iloc[-1]
-            ema9 = df30m['ema9'].iloc[-1]
-            ema21 = df30m['ema21'].iloc[-1]
-            ema60 = df30m['ema60'].iloc[-1]
+        # 使用大趋势K线判断均线位置
+        if df_trend is not None and len(df_trend) >= 1 and 'ma9' in df_trend.columns:
+            current_price = df_trend['close'].iloc[-1]
+            ma9 = df_trend['ma9'].iloc[-1]
+            ma21 = df_trend['ma21'].iloc[-1]
+            ma60 = df_trend['ma60'].iloc[-1]
+            ema9 = df_trend['ema9'].iloc[-1]
+            ema21 = df_trend['ema21'].iloc[-1]
+            ema60 = df_trend['ema60'].iloc[-1]
             
             # 检查价格是否在所有均线之上/之下
             above_all_ma = current_price > ma9 and current_price > ma21 and current_price > ma60
@@ -642,73 +675,73 @@ def check_5m_reversal(df5m, df30m=None) -> tuple[str | None, str | None]:
             above_all_ema = current_price > ema9 and current_price > ema21 and current_price > ema60
             below_all_ema = current_price < ema9 and current_price < ema21 and current_price < ema60
             
-            log.info(f"📊 30min 价格: {current_price:.2f} | MA9:{ma9:.2f} MA21:{ma21:.2f} MA60:{ma60:.2f}")
-            log.info(f"📊 30min EMA9:{ema9:.2f} EMA21:{ema21:.2f} EMA60:{ema60:.2f}")
+            log.info(f"📊 {TREND_TIMEFRAME} 价格: {current_price:.2f} | MA9:{ma9:.2f} MA21:{ma21:.2f} MA60:{ma60:.2f}")
+            log.info(f"📊 {TREND_TIMEFRAME} EMA9:{ema9:.2f} EMA21:{ema21:.2f} EMA60:{ema60:.2f}")
             
             price_in_middle = not (above_all_ma and above_all_ema) and not (below_all_ma and below_all_ema)
             
             if current_trend == 'long':
                 # 开多时，如果价格在所有均线上方，不需要RSI过滤
                 if above_all_ma and above_all_ema:
-                    log.info(f"✅ 30min价格在所有均线上方，不过滤开多信号")
+                    log.info(f"✅ {TREND_TIMEFRAME}价格在所有均线上方，不过滤开多信号")
                 elif price_in_middle:
                     # 价格在均线中间，需要放量确认
-                    volume_ok = check_30m_volume(df30m)
+                    volume_ok = check_trend_volume(df_trend)
                     if volume_ok:
-                        log.info(f"✅ 30min价格在均线中间，但放量确认，不过滤开多信号")
+                        log.info(f"✅ {TREND_TIMEFRAME}价格在均线中间，但放量确认，不过滤开多信号")
                     else:
-                        log.info(f"❌ 30min价格在均线中间，且未放量，过滤开多信号")
+                        log.info(f"❌ {TREND_TIMEFRAME}价格在均线中间，且未放量，过滤开多信号")
                         return None, current_trend
                 else:
                     # 检查RSI
-                    if len(df5m) >= 2 and 'rsi' in df5m.columns:
-                        current_rsi = df5m['rsi'].iloc[-1]
-                        log.info(f"📊 当前5min RSI: {current_rsi:.2f}")
+                    if len(df_entry) >= 2 and 'rsi' in df_entry.columns:
+                        current_rsi = df_entry['rsi'].iloc[-1]
+                        log.info(f"📊 当前{ENTRY_TIMEFRAME} RSI: {current_rsi:.2f}")
                         if current_rsi >= RSI_OVERBOUGHT:
                             log.info(f"❌ RSI({current_rsi:.2f}) >= {RSI_OVERBOUGHT}，过滤开多信号")
                             return None, current_trend
             else:
                 # 开空时，如果价格在所有均线下方，不需要RSI过滤
                 if below_all_ma and below_all_ema:
-                    log.info(f"✅ 30min价格在所有均线下方，不过滤开空信号")
+                    log.info(f"✅ {TREND_TIMEFRAME}价格在所有均线下方，不过滤开空信号")
                 elif price_in_middle:
                     # 价格在均线中间，需要放量确认
-                    volume_ok = check_30m_volume(df30m)
+                    volume_ok = check_trend_volume(df_trend)
                     if volume_ok:
-                        log.info(f"✅ 30min价格在均线中间，但放量确认，不过滤开空信号")
+                        log.info(f"✅ {TREND_TIMEFRAME}价格在均线中间，但放量确认，不过滤开空信号")
                     else:
-                        log.info(f"❌ 30min价格在均线中间，且未放量，过滤开空信号")
+                        log.info(f"❌ {TREND_TIMEFRAME}价格在均线中间，且未放量，过滤开空信号")
                         return None, current_trend
                 else:
                     # 检查RSI
-                    if len(df5m) >= 2 and 'rsi' in df5m.columns:
-                        current_rsi = df5m['rsi'].iloc[-1]
-                        log.info(f"📊 当前5min RSI: {current_rsi:.2f}")
+                    if len(df_entry) >= 2 and 'rsi' in df_entry.columns:
+                        current_rsi = df_entry['rsi'].iloc[-1]
+                        log.info(f"📊 当前{ENTRY_TIMEFRAME} RSI: {current_rsi:.2f}")
                         if current_rsi <= RSI_OVERSOLD:
                             log.info(f"❌ RSI({current_rsi:.2f}) <= {RSI_OVERSOLD}，过滤开空信号")
                             return None, current_trend
         
         return current_trend, current_trend
     else:
-        log.info(f"➡️  5min MACD无反转，方向持续: {current_trend}")
+        log.info(f"➡️  {ENTRY_TIMEFRAME} MACD无反转，方向持续: {current_trend}")
         return None, current_trend
 
-def check_30m_volume(df30m) -> bool:
-    """检查30min K线是否放量（当前成交量 >= 前4-5根平均的1.5-2倍）"""
-    if df30m is None or len(df30m) < 6 or 'volume' not in df30m.columns:
-        log.warning("❌ 30min数据不足，无法检查放量")
+def check_trend_volume(df) -> bool:
+    """检查趋势K线是否放量（当前成交量 >= 前4-5根平均的1.5-2倍）"""
+    if df is None or len(df) < 6 or 'volume' not in df.columns:
+        log.warning(f"❌ {TREND_TIMEFRAME}数据不足，无法检查放量")
         return False
     
-    current_volume = df30m['volume'].iloc[-1]
+    current_volume = df['volume'].iloc[-1]
     # 计算前4-5根K线的平均成交量
-    avg_volume = df30m['volume'].iloc[-5:-1].mean()  # 取前4根
+    avg_volume = df['volume'].iloc[-5:-1].mean()  # 取前4根
     
     if avg_volume == 0:
         log.warning("❌ 平均成交量为0，无法检查放量")
         return False
     
     volume_ratio = current_volume / avg_volume
-    log.info(f"📊 30min放量检查 | 当前量={current_volume:.0f} | 前4根平均={avg_volume:.0f} | 倍数={volume_ratio:.2f}x")
+    log.info(f"📊 {TREND_TIMEFRAME}放量检查 | 当前量={current_volume:.0f} | 前4根平均={avg_volume:.0f} | 倍数={volume_ratio:.2f}x")
     
     # 放量为前4-5根平均的1.5-2倍
     if volume_ratio >= 1.5 and volume_ratio <= 3.0:
@@ -718,45 +751,45 @@ def check_30m_volume(df30m) -> bool:
         log.info(f"❌ 未放量 ({volume_ratio:.2f}x)，需要1.5-3.0x")
         return False
 
-def check_30m_exit(df5m, df30m) -> bool:
+def check_trend_exit(df_entry, df_trend) -> bool:
     if not position_tracker.get('position'):
         log.info("无持仓，跳过平仓检查")
         return False
 
-    closed_30m_trend = get_closed_30m_trend(df30m)
-    entry_5m_dir = position_tracker.get('entry_5m_macd_direction')
+    closed_trend = get_closed_trend(df_trend, TREND_TIMEFRAME)
+    entry_dir = position_tracker.get('entry_entry_macd_direction')
     open_direction = position_tracker.get('position')
 
-    if closed_30m_trend is None:
-        log.warning("无法获取已收盘30min MACD趋势，使用5min趋势作为兜底")
-        current_5m_trend = get_5m_current_trend(df5m)
-        if current_5m_trend is None:
-            log.warning("5min趋势也无法获取，跳过平仓检查")
+    if closed_trend is None:
+        log.warning(f"无法获取已收盘{TREND_TIMEFRAME} MACD趋势，使用{ENTRY_TIMEFRAME}趋势作为兜底")
+        current_entry_trend = get_entry_current_trend(df_entry)
+        if current_entry_trend is None:
+            log.warning(f"{ENTRY_TIMEFRAME}趋势也无法获取，跳过平仓检查")
             return False
-        if open_direction == 'long' and current_5m_trend == 'short':
-            log.info(f"📊 兜底平仓: 持仓long，但5min趋势变short")
+        if open_direction == 'long' and current_entry_trend == 'short':
+            log.info(f"📊 兜底平仓: 持仓long，但{ENTRY_TIMEFRAME}趋势变short")
             return True
-        elif open_direction == 'short' and current_5m_trend == 'long':
-            log.info(f"📊 兜底平仓: 持仓short，但5min趋势变long")
+        elif open_direction == 'short' and current_entry_trend == 'long':
+            log.info(f"📊 兜底平仓: 持仓short，但{ENTRY_TIMEFRAME}趋势变long")
             return True
         else:
             return False
 
-    if entry_5m_dir is None:
-        log.warning("开仓5min方向未记录，跳过平仓检查")
+    if entry_dir is None:
+        log.warning(f"开仓{ENTRY_TIMEFRAME}方向未记录，跳过平仓检查")
         return False
 
-    log.info(f"📊 平仓检查 | 已收盘30min趋势={closed_30m_trend} | 开仓时5min方向={entry_5m_dir}")
+    log.info(f"📊 平仓检查 | 已收盘{TREND_TIMEFRAME}趋势={closed_trend} | 开仓时{ENTRY_TIMEFRAME}方向={entry_dir}")
 
     should_close = False
-    if entry_5m_dir == 'long' and closed_30m_trend == 'short':
+    if entry_dir == 'long' and closed_trend == 'short':
         should_close = True
-        reason = "开仓时5min=long，但已收盘30min=short"
-    elif entry_5m_dir == 'short' and closed_30m_trend == 'long':
+        reason = f"开仓时{ENTRY_TIMEFRAME}=long，但已收盘{TREND_TIMEFRAME}=short"
+    elif entry_dir == 'short' and closed_trend == 'long':
         should_close = True
-        reason = "开仓时5min=short，但已收盘30min=long"
+        reason = f"开仓时{ENTRY_TIMEFRAME}=short，但已收盘{TREND_TIMEFRAME}=long"
     else:
-        reason = "已收盘30min趋势与开仓时5min方向一致，继续持仓"
+        reason = f"已收盘{TREND_TIMEFRAME}趋势与开仓时{ENTRY_TIMEFRAME}方向一致，继续持仓"
 
     log.info(f"平仓判断: {reason}")
 
@@ -768,7 +801,7 @@ def check_30m_exit(df5m, df30m) -> bool:
         return False
 
 # ==================== 策略检查入口 ====================
-def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
+def run_strategy_check(is_trend_check=False, is_entry_check=False):
     now_str = cst_str()
     position_status = position_tracker.get('position')
 
@@ -779,61 +812,61 @@ def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
     except Exception as e:
         log.error(f"获取价格失败: {e}")
 
-    df30m = None
-    df5m = None
+    df_trend = None
+    df_entry = None
     try:
-        df30m = fetch_klines(exchange, SYMBOL, '30m', 120)
-        df30m = calculate_indicators(df30m, '30m', MACD_FAST, MACD_SLOW, MACD_SIGNAL, RSI_LENGTH)
+        df_trend = fetch_klines(exchange, SYMBOL, TREND_TIMEFRAME, 120)
+        df_trend = calculate_indicators(df_trend, TREND_TIMEFRAME, MACD_FAST, MACD_SLOW, MACD_SIGNAL, RSI_LENGTH)
     except Exception as e:
-        log.error(f"获取30m K线失败: {e}")
+        log.error(f"获取{TREND_TIMEFRAME} K线失败: {e}")
 
     try:
-        df5m = fetch_klines(exchange, SYMBOL, '5m', 100)
-        df5m = calculate_indicators(df5m, '5m', MACD_FAST, MACD_SLOW, MACD_SIGNAL, RSI_LENGTH)
+        df_entry = fetch_klines(exchange, SYMBOL, ENTRY_TIMEFRAME, 100)
+        df_entry = calculate_indicators(df_entry, ENTRY_TIMEFRAME, MACD_FAST, MACD_SLOW, MACD_SIGNAL, RSI_LENGTH)
     except Exception as e:
-        log.error(f"获取5m K线失败: {e}")
+        log.error(f"获取{ENTRY_TIMEFRAME} K线失败: {e}")
 
-    macd_30m_trend = get_macd_trend_30m(df30m) if df30m is not None else None
-    macd_5m_trend = get_macd_trend_okx(df5m) if df5m is not None else None
+    macd_trend_trend = get_macd_trend_trend(df_trend, TREND_TIMEFRAME) if df_trend is not None else None
+    macd_entry_trend = get_macd_trend_okx(df_entry) if df_entry is not None else None
 
-    log.info(f"\n[{now_str}] 策略检查 | 29:30={is_29_30_check} | 04:30={is_04_30_check}")
-    log.info(f"30min={macd_30m_trend} | 5min={macd_5m_trend} | 价格={'$'+f'{current_price:.2f}' if current_price else '未获取'}")
-    log.info(f"持仓={position_status or '无'} | last_5m={position_tracker['last_5m_macd_direction']}")
+    log.info(f"\n[{now_str}] 策略检查 | trend_check={is_trend_check} | entry_check={is_entry_check}")
+    log.info(f"{TREND_TIMEFRAME}={macd_trend_trend} | {ENTRY_TIMEFRAME}={macd_entry_trend} | 价格={'$'+f'{current_price:.2f}' if current_price else '未获取'}")
+    log.info(f"持仓={position_status or '无'} | last_entry={position_tracker['last_entry_macd_direction']}")
 
-    if is_29_30_check and df5m is not None and df30m is not None:
-        log.info("\n[29:55] 检查平仓条件...")
-        should_close = check_30m_exit(df5m, df30m)
+    if is_trend_check and df_entry is not None and df_trend is not None:
+        log.info(f"\n[{get_trend_check_time()}] 检查平仓条件...")
+        should_close = check_trend_exit(df_entry, df_trend)
         if should_close:
-            if close_position('30min方向与开仓时5min方向不同'):
+            if close_position(f'{TREND_TIMEFRAME}方向与开仓时{ENTRY_TIMEFRAME}方向不同'):
                 position_status = None
                 # 平仓后立即检查开仓条件
                 log.info("\n[平仓后] 立即检查开仓条件...")
-                open_signal, current_5m = check_5m_reversal(df5m, df30m)
+                open_signal, current_entry = check_entry_reversal(df_entry, df_trend)
                 
-                if current_5m is not None:
-                    position_tracker['last_5m_macd_direction'] = current_5m
+                if current_entry is not None:
+                    position_tracker['last_entry_macd_direction'] = current_entry
                     save_state()
 
                 if open_signal:
                     # 确定最终开仓方向
                     final_open_signal = open_signal
                     
-                    # 上次亏损时需要双重确认（先看30min趋势，再看5min趋势）
+                    # 上次亏损时需要双重确认（先看大趋势，再看入场趋势）
                     double_confirm = False
                     if position_tracker.get('last_trade_loss'):
                         log.info(f"⚠️ 上次亏损，需双重确认")
-                        closed_30m_trend = get_closed_30m_trend(df30m)
-                        current_5m_trend = get_5m_current_trend(df5m)
-                        log.info(f"📊 双重确认 | 30min趋势={closed_30m_trend} | 5min趋势={current_5m_trend}")
+                        closed_trend = get_closed_trend(df_trend, TREND_TIMEFRAME)
+                        current_entry_trend = get_entry_current_trend(df_entry)
+                        log.info(f"📊 双重确认 | {TREND_TIMEFRAME}趋势={closed_trend} | {ENTRY_TIMEFRAME}趋势={current_entry_trend}")
                         
-                        # 双重确认逻辑：30min趋势决定开仓方向，5min趋势需要确认这个方向
-                        if closed_30m_trend == current_5m_trend:
+                        # 双重确认逻辑：大趋势决定开仓方向，入场趋势需要确认这个方向
+                        if closed_trend == current_entry_trend:
                             double_confirm = True
-                            # 用30min趋势作为开仓方向
-                            final_open_signal = closed_30m_trend
-                            log.info(f"✅ 双重确认成功: 使用30min趋势 {final_open_signal.upper()} 作为开仓方向")
+                            # 用大趋势作为开仓方向
+                            final_open_signal = closed_trend
+                            log.info(f"✅ 双重确认成功: 使用{TREND_TIMEFRAME}趋势 {final_open_signal.upper()} 作为开仓方向")
                         else:
-                            log.info(f"❌ 双重确认失败: 30min与5min趋势不一致")
+                            log.info(f"❌ 双重确认失败: {TREND_TIMEFRAME}与{ENTRY_TIMEFRAME}趋势不一致")
                 
                     # 开仓条件：上次盈利直接开仓，上次亏损需要双重确认
                     should_open = not position_tracker.get('last_trade_loss') or double_confirm
@@ -860,12 +893,12 @@ def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
                     else:
                         log.info(f"⚠️ 反转信号: {open_signal.upper()}，但双重确认失败 → 不开仓")
 
-    if is_04_30_check and df5m is not None:
-        log.info("\n[04:30] 检测5min MACD反转...")
-        open_signal, current_5m = check_5m_reversal(df5m, df30m)
+    if is_entry_check and df_entry is not None:
+        log.info(f"\n[{get_entry_check_time()}] 检测{ENTRY_TIMEFRAME} MACD反转...")
+        open_signal, current_entry = check_entry_reversal(df_entry, df_trend)
         
-        if current_5m is not None:
-            position_tracker['last_5m_macd_direction'] = current_5m
+        if current_entry is not None:
+            position_tracker['last_entry_macd_direction'] = current_entry
             save_state()
 
         if open_signal:
@@ -873,22 +906,22 @@ def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
                 # 确定最终开仓方向
                 final_open_signal = open_signal
                 
-                # 上次亏损时需要双重确认（先看30min趋势，再看5min趋势）
+                # 上次亏损时需要双重确认（先看大趋势，再看入场趋势）
                 double_confirm = False
                 if position_tracker.get('last_trade_loss'):
                     log.info(f"⚠️ 上次亏损，需双重确认")
-                    closed_30m_trend = get_closed_30m_trend(df30m)
-                    current_5m_trend = get_5m_current_trend(df5m)
-                    log.info(f"📊 双重确认 | 30min趋势={closed_30m_trend} | 5min趋势={current_5m_trend}")
+                    closed_trend = get_closed_trend(df_trend, TREND_TIMEFRAME) if df_trend else None
+                    current_entry_trend = get_entry_current_trend(df_entry)
+                    log.info(f"📊 双重确认 | {TREND_TIMEFRAME}趋势={closed_trend} | {ENTRY_TIMEFRAME}趋势={current_entry_trend}")
                     
-                    # 双重确认逻辑：30min趋势决定开仓方向，5min趋势需要确认这个方向
-                    if closed_30m_trend == current_5m_trend:
+                    # 双重确认逻辑：大趋势决定开仓方向，入场趋势需要确认这个方向
+                    if closed_trend == current_entry_trend:
                         double_confirm = True
-                        # 用30min趋势作为开仓方向
-                        final_open_signal = closed_30m_trend
-                        log.info(f"✅ 双重确认成功: 使用30min趋势 {final_open_signal.upper()} 作为开仓方向")
+                        # 用大趋势作为开仓方向
+                        final_open_signal = closed_trend
+                        log.info(f"✅ 双重确认成功: 使用{TREND_TIMEFRAME}趋势 {final_open_signal.upper()} 作为开仓方向")
                     else:
-                        log.info(f"❌ 双重确认失败: 30min与5min趋势不一致")
+                        log.info(f"❌ 双重确认失败: {TREND_TIMEFRAME}与{ENTRY_TIMEFRAME}趋势不一致")
                 
                 # 开仓条件：上次盈利直接开仓，上次亏损需要双重确认
                 should_open = not position_tracker.get('last_trade_loss') or double_confirm
@@ -907,7 +940,7 @@ def run_strategy_check(is_29_30_check=False, is_04_30_check=False):
             else:
                 log.info(f"⚠️ 反转信号: {open_signal.upper()}，但当前有持仓({position_status}) → 不开仓")
         else:
-            log.info("➡️  无反转信号，持仓不变")
+            log.info(f"➡️  无反转信号，持仓不变")
 
     log.info("本次检查完成\n")
 
@@ -960,6 +993,20 @@ def check_stop_loss_take_profit_loop():
         log.info(f"⚠️ [{cst_str()}] {trailing_reason}")
         close_position(trailing_reason)
 
+def get_trend_check_time():
+    """获取大趋势检查时间描述"""
+    tf_minutes = parse_timeframe_minutes(TREND_TIMEFRAME)
+    if tf_minutes < 60:
+        return f"{tf_minutes-1}:55"
+    else:
+        hours = tf_minutes // 60
+        return f"{hours}小时K线收盘前5分钟"
+
+def get_entry_check_time():
+    """获取入场检查时间描述"""
+    tf_minutes = parse_timeframe_minutes(ENTRY_TIMEFRAME)
+    return f"{tf_minutes-1}:30"
+
 def main():
     log.info("=== OKX 本地版交易策略机器人 已启动 ===")
     
@@ -969,40 +1016,43 @@ def main():
         exit(1)
     
     log.info(f"标的: {SYMBOL} | 目标保证金: {TARGET_MARGIN} USDT | 杠杆: {LEVERAGE}x")
-    log.info(f"入场: 5min MACD反转 @ 04:30 | 出场: 30min MACD方向不同 @ 29:55")
+    log.info(f"大趋势: {TREND_TIMEFRAME} MACD方向 | 入场: {ENTRY_TIMEFRAME} MACD反转")
     log.info(f"止盈止损: 止损={STOP_LOSS_RATIO*100:.1f}% | 止盈={TAKE_PROFIT_RATIO*100:.1f}%")
     if TRAILING_STOP_ENABLE:
         log.info(f"移动止损: 已启用 | 启动盈利={TRAILING_STOP_START_RATIO*100:.1f}% | 追踪比例={TRAILING_STOP_RATIO*100:.1f}%")
-    log.info(f"状态已加载: position={position_tracker['position']} | last_5m={position_tracker['last_5m_macd_direction']}")
+    log.info(f"状态已加载: position={position_tracker['position']} | last_entry={position_tracker['last_entry_macd_direction']}")
 
-    _5m_done_ts = None
-    _30m_done_ts = None
-    _sl_done_ts = None
+    entry_done_ts = None
+    trend_done_ts = None
+    sl_done_ts = None
+
+    entry_minutes = parse_timeframe_minutes(ENTRY_TIMEFRAME)
+    trend_minutes = parse_timeframe_minutes(TREND_TIMEFRAME)
 
     while True:
         now_utc = datetime.now(timezone.utc)
         now_cst = now_utc.astimezone(timezone(timedelta(hours=8)))
         m, s = now_cst.minute, now_cst.second
 
-        # 5min开仓检查：K线收盘后3-8秒
-        if not position_tracker.get('position') and m % 5 == 0 and s >= 3 and s <= 8:
-            if not _5m_done_ts or now_utc > _5m_done_ts + timedelta(minutes=4):
-                log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查5min开仓条件...")
-                run_strategy_check(is_29_30_check=False, is_04_30_check=True)
-                _5m_done_ts = now_utc
+        # 入场检查：K线收盘后3-8秒
+        if not position_tracker.get('position') and m % entry_minutes == 0 and s >= 3 and s <= 8:
+            if not entry_done_ts or now_utc > entry_done_ts + timedelta(minutes=entry_minutes - 1):
+                log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查{ENTRY_TIMEFRAME}开仓条件...")
+                run_strategy_check(is_trend_check=False, is_entry_check=True)
+                entry_done_ts = now_utc
 
-        # 30min平仓检查：K线收盘后10-15秒（与5min检查错开）
-        if position_tracker.get('position') and m % 30 == 0 and s >= 10 and s <= 15:
-            if not _30m_done_ts or now_utc > _30m_done_ts + timedelta(minutes=29):
-                log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查30min平仓条件...")
-                run_strategy_check(is_29_30_check=True, is_04_30_check=False)
-                _30m_done_ts = now_utc
+        # 大趋势平仓检查：K线收盘后10-15秒（与入场检查错开）
+        if position_tracker.get('position') and m % trend_minutes == 0 and s >= 10 and s <= 15:
+            if not trend_done_ts or now_utc > trend_done_ts + timedelta(minutes=trend_minutes - 1):
+                log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查{TREND_TIMEFRAME}平仓条件...")
+                run_strategy_check(is_trend_check=True, is_entry_check=False)
+                trend_done_ts = now_utc
 
         # 止盈止损检查：每隔一段时间检查一次
         if position_tracker.get('position'):
-            if not _sl_done_ts or now_utc > _sl_done_ts + timedelta(seconds=TRAILING_CHECK_INTERVAL):
+            if not sl_done_ts or now_utc > sl_done_ts + timedelta(seconds=TRAILING_CHECK_INTERVAL):
                 check_stop_loss_take_profit_loop()
-                _sl_done_ts = now_utc
+                sl_done_ts = now_utc
 
         time.sleep(1)
 
