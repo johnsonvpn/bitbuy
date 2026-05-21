@@ -137,6 +137,15 @@ def load_state() -> dict:
     if STATE_FILE.exists():
         try:
             data = json.loads(STATE_FILE.read_text())
+            # 处理字段名兼容性：从旧字段名迁移到新字段名
+            if 'last_5m_macd_direction' in data and 'last_entry_macd_direction' not in data:
+                data['last_entry_macd_direction'] = data['last_5m_macd_direction']
+            if 'entry_5m_macd_direction' in data and 'entry_entry_macd_direction' not in data:
+                data['entry_entry_macd_direction'] = data['entry_5m_macd_direction']
+            # 使用默认值填充缺失的字段
+            for key, default_value in _DEFAULT_TRACKER.items():
+                if key not in data:
+                    data[key] = default_value
             return _deserialize(data)
         except Exception as e:
             log.warning(f"加载状态失败，使用默认值: {e}")
@@ -1034,15 +1043,15 @@ def main():
         now_cst = now_utc.astimezone(timezone(timedelta(hours=8)))
         m, s = now_cst.minute, now_cst.second
 
-        # 入场检查：K线收盘后3-8秒
-        if not position_tracker.get('position') and m % entry_minutes == 0 and s >= 3 and s <= 8:
+        # 入场检查：K线收盘后8-13秒（延迟5秒，防止API限流）
+        if not position_tracker.get('position') and m % entry_minutes == 0 and s >= 8 and s <= 13:
             if not entry_done_ts or now_utc > entry_done_ts + timedelta(minutes=entry_minutes - 1):
                 log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查{ENTRY_TIMEFRAME}开仓条件...")
                 run_strategy_check(is_trend_check=False, is_entry_check=True)
                 entry_done_ts = now_utc
 
-        # 大趋势平仓检查：K线收盘后10-15秒（与入场检查错开）
-        if position_tracker.get('position') and m % trend_minutes == 0 and s >= 10 and s <= 15:
+        # 大趋势平仓检查：K线收盘后15-20秒（延迟5秒，防止API限流）
+        if position_tracker.get('position') and m % trend_minutes == 0 and s >= 15 and s <= 20:
             if not trend_done_ts or now_utc > trend_done_ts + timedelta(minutes=trend_minutes - 1):
                 log.info(f"[{now_cst.strftime('%H:%M:%S')}] 📊 检查{TREND_TIMEFRAME}平仓条件...")
                 run_strategy_check(is_trend_check=True, is_entry_check=False)
