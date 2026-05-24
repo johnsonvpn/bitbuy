@@ -67,12 +67,55 @@ position_tracker = {
     'trade_count': 0,           # 交易次数
 }
 
+# 合约面值缓存
+_contract_size_cache = {}
+
 # ==================== 辅助函数 ====================
-def now_utc():
-    return datetime.now(timezone.utc)
+def get_contract_size() -> float:
+    """获取合约面值"""
+    if 'size' in _contract_size_cache:
+        return _contract_size_cache['size']
+    try:
+        log.info(f"正在加载市场信息，获取合约面值...")
+        markets = exchange.load_markets()
+        key = SYMBOL.replace('-', '/').replace('USDT', 'USDT:USDT', 1)
+        market = markets.get(key) or markets.get(SYMBOL)
+        
+        if market:
+            size = float(market['contractSize'])
+        else:
+            log.warning(f"未找到市场信息，使用默认合约面值")
+            if 'BTC' in SYMBOL:
+                size = 0.01
+            elif 'SOL' in SYMBOL:
+                size = 1.0
+            elif 'ETH' in SYMBOL:
+                size = 0.1
+            else:
+                size = 0.01
+        
+        _contract_size_cache['size'] = size
+        log.info(f"合约面值: {size}")
+        return size
+    except Exception as e:
+        log.error(f"获取合约面值失败: {e}")
+        if 'ETH' in SYMBOL:
+            return 0.1
+        return 1.0
+
+def set_leverage_once():
+    """设置杠杆（只设置一次）"""
+    try:
+        exchange.set_leverage(LEVERAGE, SYMBOL, params={'mgnMode': 'isolated'})
+        log.info(f"杠杆已设置: {LEVERAGE}x 逐仓")
+    except Exception as e:
+        log.warning(f"设置杠杆失败（可能已设置）: {e}")
+
+def now_local():
+    return datetime.now()
 
 def now_str():
-    return now_utc().strftime('%Y-%m-%d %H:%M:%S')
+    return now_local().strftime('%Y-%m-%d %H:%M:%S')
 
 def save_state():
     try:
@@ -111,17 +154,21 @@ def fetch_klines(symbol, timeframe, limit=100, retries=3):
     """获取K线数据（带重试机制）"""
     for attempt in range(retries):
         try:
+            log.debug(f"正在获取K线数据: {symbol} {timeframe} limit={limit}")
             ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df = df.set_index('timestamp')
+            log.debug(f"K线数据获取成功: {len(df)} 条")
             return df
         except Exception as e:
-            log.warning(f"获取K线数据失败 (尝试 {attempt+1}/{retries}): {e}")
+            log.warning(f"获取K线数据失败 (尝试 {attempt+1}/{retries}): {str(e)[:200]}")
             if attempt < retries - 1:
-                time.sleep(2)  # 等待2秒后重试
+                wait_time = (attempt + 1) * 3  # 递增等待时间：3秒、6秒、9秒
+                log.info(f"等待 {wait_time} 秒后重试...")
+                time.sleep(wait_time)
             else:
-                log.error(f"获取K线数据最终失败: {e}")
+                log.error(f"获取K线数据最终失败: {str(e)[:200]}")
                 return None
 
 def detect_peaks_valleys(df1h):
@@ -200,24 +247,30 @@ def is_below_all_ma(df1h):
 def open_position(direction, price, stop_loss):
     """开仓"""
     try:
-        log.info(f"⬆️ [{now_str()}] 开仓 {direction.upper()} | 当前价: ${price:.2f} | 初始止损: ${stop_loss:.2f if stop_loss else 0}")
+        set_leverage_once()
         
-        # 计算数量
-        contract_value = TARGET_MARGIN * LEVERAGE
-        quantity = contract_value / price
+        # 计算数量（考虑合约面值）
+        contract_size = get_contract_size()
+        position_value = TARGET_MARGIN * LEVERAGE
+        per_contract_value = price * contract_size
+        quantity = position_value / per_contract_value
         quantity = round(quantity, 4)
         
-        # 下单
-        if direction == 'long':
-            order = exchange.create_order(SYMBOL, 'market', 'buy', quantity)
-        else:
-            order = exchange.create_order(SYMBOL, 'market', 'sell', quantity)
+        log.info(f"⬆️ [{now_str()}] 开仓 {direction.upper()} | 张数: {quantity} | 当前价: ${price:.2f} | 初始止损: ${stop_loss:.2f}" if stop_loss else f"⬆️ [{now_str()}] 开仓 {direction.upper()} | 张数: {quantity} | 当前价: ${price:.2f} | 初始止损: 未设置")
         
-        log.info(f"✅ [{now_str()}] 开仓成功 | 成交均价: ${price:.2f} | 订单ID: {order['id']}")
+        # 下单（OKX需要指定posSide参数）
+        params = {'tdMode': 'isolated', 'posSide': 'long' if direction == 'long' else 'short'}
+        if direction == 'long':
+            order = exchange.create_order(SYMBOL, 'market', 'buy', quantity, None, params)
+        else:
+            order = exchange.create_order(SYMBOL, 'market', 'sell', quantity, None, params)
+        
+        fill_price = order.get('average') or order.get('price') or price
+        log.info(f"✅ [{now_str()}] 开仓成功 | 成交均价: ${fill_price:.2f} | 订单ID: {order['id']}")
         
         # 更新状态
         position_tracker['position'] = direction
-        position_tracker['entry_price'] = price
+        position_tracker['entry_price'] = fill_price
         position_tracker['entry_time'] = now_str()
         
         # 初始止损点设置（即您说的：止损点为上一个波谷/波峰）
@@ -249,11 +302,12 @@ def close_position(reason):
         side = position['side']
         quantity = abs(float(position['contracts']))
         
-        # 平仓
+        # 平仓（OKX需要指定posSide参数）
+        params = {'posSide': side}
         if side == 'long':
-            order = exchange.create_order(SYMBOL, 'market', 'sell', quantity)
+            order = exchange.create_order(SYMBOL, 'market', 'sell', quantity, None, params)
         else:
-            order = exchange.create_order(SYMBOL, 'market', 'buy', quantity)
+            order = exchange.create_order(SYMBOL, 'market', 'buy', quantity, None, params)
         
         # 计算盈亏
         entry_price = float(position['entryPrice'])
@@ -385,14 +439,26 @@ def main():
     log.info(f"标的: {SYMBOL} | 目标保证金: {TARGET_MARGIN} USDT | 杠杆: {LEVERAGE}x")
     log.info(f"入场: 1h K线站上/跌破所有均线 | 出场: 跌破波谷(多单)/突破波峰(空单)")
     
+    # 记录上次检查的小时，避免重复检查
+    last_checked_hour = -1
+    check_executed = False  # 标记该小时是否已检查过
+    
     while True:
         try:
-            now = now_utc()
+            now = now_local()
+            h = now.hour
             m = now.minute
             s = now.second
             
-            # 每小时检查一次（在整点后10秒，与策略1错开）
-            is_hourly_check = m == 0 and s >= 10 and s <= 15
+            # 每小时检查一次（在整点后10-15秒，与策略1错开）
+            is_new_hour = h != last_checked_hour
+            
+            # 如果是新的小时，重置标记
+            if is_new_hour:
+                check_executed = False
+                last_checked_hour = h
+            
+            is_hourly_check = m == 0 and s >= 10 and s <= 15 and not check_executed
             
             if is_hourly_check:
                 # 获取1h K线
@@ -417,7 +483,17 @@ def main():
                             # 平仓后立即检查开仓条件
                             open_signal = check_open_condition(df1h)
                             if open_signal:
-                                open_position(open_signal, current_price, '波峰波谷策略')
+                                # 获取初始止损点（上一个波谷/波峰）
+                                stop_loss = None
+                                if open_signal == 'long':
+                                    stop_loss = get_last_valley(df1h)
+                                else:
+                                    stop_loss = get_last_peak(df1h)
+                                
+                                if stop_loss:
+                                    open_position(open_signal, current_price, stop_loss)
+                                else:
+                                    log.warning(f"❌ 未找到初始止损点，放弃开仓")
                 
                 # 如果无持仓，检查开仓条件
                 else:
@@ -434,6 +510,9 @@ def main():
                             open_position(open_signal, current_price, stop_loss)
                         else:
                             log.warning(f"❌ 未找到初始止损点，放弃开仓")
+                
+                # 标记该小时检查已完成
+                check_executed = True
             
             time.sleep(1)
         

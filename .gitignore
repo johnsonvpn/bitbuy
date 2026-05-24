@@ -1,2 +1,19 @@
 .DS_Store
 combined_trading_bot.log
+
+# 日志文件
+*.log
+
+# Python缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 配置文件（包含密钥）
+*.env
+
+# 状态文件
+state*.json
+
+# IDE配置
+.vscode/
