@@ -239,7 +239,7 @@ def calculate_indicators(df):
     return df
 
 def get_macd_trend(df, idx=-1):
-    if df is None or len(df) < 3 or 'macd_hist' not in df.columns:
+    if df is None or len(df) < abs(idx) + 1 or 'macd_hist' not in df.columns:
         return None
     cur = df['macd_hist'].iloc[idx]
     prev = df['macd_hist'].iloc[idx - 1]
@@ -287,60 +287,27 @@ def run_new_strategy_check(_, exch, symbol, fast, slow, signal, rsi_len,
             last_execution['close_triggered'] = True
 
     # ==================== 开仓检查 ====================
-    if is_1h_check and active:
-        log.info(f"📋 【开仓条件检查】活跃={active} | 有持仓={bool(position_tracker.get('position'))} | 1H={trend_1h} | 4H={trend_4h}")
-        
-        if not position_tracker.get('position') and trend_1h and trend_4h:
-            prev_1h = position_tracker.get('last_1h_macd_direction') or get_macd_trend(df1h, -2)
-            log.info(f"  ├─ 前置条件: ✅ 无持仓 | ✅ 1H趋势有效 | ✅ 4H趋势有效")
-            log.info(f"  ├─ 1H当前方向: {trend_1h} | 上一根方向: {prev_1h}")
-            
-            if prev_1h and trend_1h != prev_1h:           # 检测到1H反转
-                log.info(f"  ├─ 反转检测: ✅ 1H方向发生反转 ({prev_1h} → {trend_1h})")
-                
-                # 检查反转是否发生在最近2根K线内（不算追高）
-                reversal_recent = False
-                prev_2h = get_macd_trend(df1h, -3) if df1h is not None and len(df1h) >= 4 else None
-                prev_3h = get_macd_trend(df1h, -4) if df1h is not None and len(df1h) >= 4 else None
-                
-                if df1h is not None and len(df1h) >= 4:
-                    reversal_recent = (prev_2h != trend_1h) or (prev_3h != trend_1h and prev_2h == trend_1h)
-                    log.info(f"  ├─ 追高检查: 倒数第2根={prev_2h} | 倒数第3根={prev_3h}")
-                else:
-                    reversal_recent = True  # K线不足时默认允许开仓
-                    log.info(f"  ├─ 追高检查: ⚠️ K线数量不足，默认允许")
-                
-                position_tracker['last_1h_macd_direction'] = trend_1h
-                last_execution['reversal_detected'] = True
+    if is_1h_check and active and not position_tracker.get('position') and trend_1h and trend_4h:
+        prev_1h = get_macd_trend(df1h, -2)
 
-                if trend_4h == trend_1h:                  # 大小趋势一致
-                    log.info(f"  ├─ 趋势一致性: ✅ 4H({trend_4h})与1H({trend_1h})同向")
-                    
-                    if reversal_recent:                   # 反转发生在最近2根K线内（不算追高）
-                        log.info(f"  ├─ 追高检查: ✅ 反转在2根K线内，不算追高")
-                        log.info(f"  └─ ⚡ 所有条件满足 → 执行开仓 {trend_1h.upper()}")
-                        if current_price:
-                            open_position(trend_1h, current_price, trend_1h)
-                    else:
-                        log.info(f"  ├─ 追高检查: ❌ 反转超过2根K线（追高风险）")
-                        log.info(f"  └─ ❌ 拒绝开仓")
-                else:
-                    log.info(f"  ├─ 趋势一致性: ❌ 4H({trend_4h})与1H({trend_1h})方向不一致")
-                    log.info(f"  └─ ❌ 拒绝开仓")
+        if prev_1h and trend_1h != prev_1h:
+            reversal_recent = False
+            if df1h is not None and len(df1h) >= 4:
+                prev_2h = get_macd_trend(df1h, -3)
+                prev_3h = get_macd_trend(df1h, -4)
+                reversal_recent = (prev_2h != trend_1h) or (prev_3h != trend_1h and prev_2h == trend_1h)
             else:
-                log.info(f"  ├─ 反转检测: ❌ 1H方向未发生反转")
-                log.info(f"  └─ ❌ 拒绝开仓")
-        else:
-            reasons = []
-            if position_tracker.get('position'):
-                reasons.append("有持仓")
-            if not trend_1h:
-                reasons.append("1H趋势无效")
-            if not trend_4h:
-                reasons.append("4H趋势无效")
-            log.info(f"  └─ ❌ 前置条件不满足: {', '.join(reasons)}")
+                reversal_recent = True
 
-    # 更新面板数据
+            if reversal_recent and trend_4h == trend_1h:
+                log.info(f"⚡ 1H反转({prev_1h}→{trend_1h}) + 4H同向({trend_4h}) → 执行开仓")
+                if current_price:
+                    open_position(trend_1h, current_price, trend_1h)
+            elif not reversal_recent:
+                log.info(f"⚠️ 1H反转({prev_1h}→{trend_1h})但超过2根K线（追高风险），拒绝开仓")
+            elif trend_4h != trend_1h:
+                log.info(f"⚠️ 1H反转({prev_1h}→{trend_1h})但4H方向不一致({trend_4h})，拒绝开仓")
+
     last_execution.update({
         'timestamp': now_str,
         'current_price': current_price,
