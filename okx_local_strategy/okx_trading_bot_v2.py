@@ -729,16 +729,15 @@ def main():
                 
                 # 如果有持仓，先检查平仓条件
                 if position:
-                    # 获取日线反转状态和当前日线方向
-                    reversal_info = check_daily_reversal()
-                    is_reversed, daily_current_dir = reversal_info if reversal_info else (False, None)
+                    # 获取日线方向
+                    _, _, daily_current_dir = get_daily_close_direction()
 
-                    # 反转平仓：如果日线反转且持仓方向与日线方向相反，立即平仓
-                    if is_reversed and daily_current_dir:
+                    # 如果持仓方向与日线方向相反，立即平仓
+                    if daily_current_dir:
                         if (position == 'short' and daily_current_dir == 'long') or \
                            (position == 'long' and daily_current_dir == 'short'):
-                            log.warning(f"🚨 日线反转平仓: 持仓={position} | 日线方向={daily_current_dir} | 立即平仓!")
-                            if close_position('日线反转平仓'):
+                            log.warning(f"🚨 日线方向与持仓相反: 持仓={position} | 日线方向={daily_current_dir} | 立即平仓!")
+                            if close_position('日线方向相反平仓'):
                                 check_executed = True
                                 time.sleep(1)
                                 continue
@@ -752,32 +751,30 @@ def main():
                 
                 # 如果无持仓，检查开仓条件
                 else:
-                    # 获取日线反转状态和当前日线方向
-                    reversal_info = check_daily_reversal()
-                    is_reversed, daily_current_dir = reversal_info if reversal_info else (False, None)
+                    # 获取日线方向
+                    _, _, daily_current_dir = get_daily_close_direction()
                     
                     open_signal = check_open_condition(df1h)
                     if open_signal:
-                        # 根据日线方向过滤开仓信号（必须等反转才执行对应方向）
-                        if is_reversed and daily_current_dir:
-                            if daily_current_dir == 'long' and open_signal == 'long':
-                                log.info(f"� 日线反转做多: 开多仓信号确认")
-                                stop_loss = get_last_valley(df1h)
-                                if stop_loss:
-                                    open_position(open_signal, current_price, stop_loss)
-                                else:
-                                    log.warning(f"❌ 未找到初始止损点（波谷），放弃开仓")
-                            elif daily_current_dir == 'short' and open_signal == 'short':
-                                log.info(f"📕 日线反转做空: 开空仓信号确认")
-                                stop_loss = get_last_peak(df1h)
-                                if stop_loss:
-                                    open_position(open_signal, current_price, stop_loss)
-                                else:
-                                    log.warning(f"❌ 未找到初始止损点（波峰），放弃开仓")
+                        # 根据日线方向过滤开仓信号
+                        if daily_current_dir == 'long' and open_signal == 'long':
+                            log.info(f"📗 日线多头: 开多仓信号确认")
+                            stop_loss = get_last_valley(df1h)
+                            if stop_loss:
+                                open_position(open_signal, current_price, stop_loss)
                             else:
-                                log.info(f"🚫 日线方向={daily_current_dir}，过滤反向信号={open_signal}")
+                                log.warning(f"❌ 未找到初始止损点（波谷），放弃开仓")
+                        elif daily_current_dir == 'short' and open_signal == 'short':
+                            log.info(f"📕 日线空头: 开空仓信号确认")
+                            stop_loss = get_last_peak(df1h)
+                            if stop_loss:
+                                open_position(open_signal, current_price, stop_loss)
+                            else:
+                                log.warning(f"❌ 未找到初始止损点（波峰），放弃开仓")
+                        elif daily_current_dir:
+                            log.info(f"🚫 日线方向={daily_current_dir}，过滤反向信号={open_signal}")
                         else:
-                            log.info(f"⏳ 日线未反转或方向不明，等待明确信号")
+                            log.info(f"⏳ 日线方向不明，等待明确信号")
                 
                 # 标记该小时检查已完成
                 check_executed = True
