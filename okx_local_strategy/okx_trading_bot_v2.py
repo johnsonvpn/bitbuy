@@ -199,31 +199,52 @@ def fetch_klines(symbol, timeframe, limit=100, retries=3):
 
 def detect_peaks_valleys(df1h):
     """检测1h K线的波峰和波谷
-    使用收盘价判断趋势方向，使用最低价/最高价记录实际波谷位置
+    基于V/U字型形态判断：
+    - 波谷：连续几根K线形成V型或U型，中间的最低点
+    - 波峰：连续几根K线形成倒V型或倒U型，中间的最高点
+
+    使用7根K线窗口（V/U型检测）：
+    - 当前K线是窗口内最低点 → 波谷
+    - 当前K线是窗口内最高点 → 波峰
+    - 不要求严格的左右对称
     """
-    if len(df1h) < 3:
+    if len(df1h) < 7:
         return None, None
-    
+
     peaks = []  # (索引, 价格) 列表
     valleys = []  # (索引, 价格) 列表
-    
-    for i in range(1, len(df1h)-1):
-        prev_close = df1h['close'].iloc[i-1]
+
+    # 使用7根K线滑动窗口检测V/U型形态
+    # 窗口: [i-3, i-2, i-1, i, i+1, i+2, i+3]
+    for i in range(3, len(df1h)-3):
         curr_close = df1h['close'].iloc[i]
-        next_close = df1h['close'].iloc[i+1]
-        curr_low = df1h['low'].iloc[i]
-        curr_high = df1h['high'].iloc[i]
-        
-        # 波峰判断（基于收盘价）：当前收盘价高于前后收盘价
-        if curr_close > prev_close and curr_close > next_close:
-            # 记录波峰时，使用最高价（实际波峰位置）
-            peaks.append((i, curr_high))
-        
-        # 波谷判断（基于收盘价）：当前收盘价低于前后收盘价
-        elif curr_close < prev_close and curr_close < next_close:
-            # 记录波谷时，使用最低价（实际波谷位置）
-            valleys.append((i, curr_low))
-    
+
+        # 获取7根K线窗口的收盘价
+        window_closes = [
+            df1h['close'].iloc[i-3],
+            df1h['close'].iloc[i-2],
+            df1h['close'].iloc[i-1],
+            curr_close,
+            df1h['close'].iloc[i+1],
+            df1h['close'].iloc[i+2],
+            df1h['close'].iloc[i+3]
+        ]
+
+        # 波谷：当前K线严格小于窗口内所有其他K线
+        if curr_close < min(window_closes[:3]) and curr_close < min(window_closes[4:]):
+            # 确保左右两侧都比当前K线高
+            left_min = min(window_closes[0], window_closes[1], window_closes[2])
+            right_min = min(window_closes[4], window_closes[5], window_closes[6])
+            if curr_close < left_min and curr_close < right_min:
+                valleys.append((i, curr_close))
+
+        # 波峰：当前K线严格大于窗口内所有其他K线
+        elif curr_close > max(window_closes[:3]) and curr_close > max(window_closes[4:]):
+            left_max = max(window_closes[0], window_closes[1], window_closes[2])
+            right_max = max(window_closes[4], window_closes[5], window_closes[6])
+            if curr_close > left_max and curr_close > right_max:
+                peaks.append((i, curr_close))
+
     return peaks, valleys
 
 def get_last_valley(df1h):
@@ -241,44 +262,28 @@ def get_last_peak(df1h):
     return None
 
 def get_daily_close_direction():
-    """获取日线收盘价方向（昨天vs前天）
-    返回: 'long' (涨), 'short' (跌), None (数据不足)
+    """获取日线收盘价方向（使用已完成的K线）
+    返回: (昨天方向, 前天方向)
     """
     try:
         df_daily = fetch_klines(SYMBOL, '1d', limit=10)
-        if df_daily is None or len(df_daily) < 4:
-            log.warning("无法获取足够日K线数据（需要至少4根）")
-            return None, None, None
+        if df_daily is None or len(df_daily) < 3:
+            log.warning("无法获取足够日K线数据（需要至少3根）")
+            return None, None
 
         yesterday_close = df_daily['close'].iloc[-2]
         day_before_close = df_daily['close'].iloc[-3]
-        current_day_close = df_daily['close'].iloc[-1]
 
         yesterday_direction = 'long' if yesterday_close > day_before_close else 'short'
         day_before_direction = 'long' if day_before_close > df_daily['close'].iloc[-4] else 'short'
 
-        current_direction = 'long' if current_day_close > yesterday_close else 'short'
+        log.info(f"📅 日线收盘方向: 前天={day_before_direction}({day_before_close:.2f}) | 昨天={yesterday_direction}({yesterday_close:.2f})")
 
-        log.info(f"📅 日线收盘方向: 前天={day_before_direction}({day_before_close:.2f}) | 昨天={yesterday_direction}({yesterday_close:.2f}) | 今天={current_direction}({current_day_close:.2f})")
-
-        return yesterday_direction, day_before_direction, current_direction
+        return yesterday_direction, day_before_direction
 
     except Exception as e:
         log.error(f"获取日线收盘方向失败: {e}")
-        return None, None, None
-
-def check_daily_reversal():
-    """检查日线是否反转
-    反转条件：昨天方向 != 前天方向
-    返回: (is_reversed, daily_current_dir)
-    """
-    yesterday_dir, day_before_dir, current_dir = get_daily_close_direction()
-    if yesterday_dir is None:
-        return False, None
-
-    is_reversed = (yesterday_dir != day_before_dir)
-    log.info(f"📅 日线反转检测: 昨天={yesterday_dir} | 前天={day_before_dir} | {'✅ 反转' if is_reversed else '❌ 未反转'}")
-    return is_reversed, current_dir
+        return None, None
 
 def is_above_all_ma(df1h, verbose=False):
     """检查1h K线是否站上所有均线"""
@@ -386,7 +391,12 @@ def open_position(direction, price, stop_loss):
                      f"📈 方向: {direction.upper()}\n" \
                      f"💰 成交均价: ${fill_price:.2f}\n" \
                      f"📊 数量: {quantity} 张\n" \
-                     f"🛡️ 止损: ${stop_loss:.2f}" if stop_loss else "未设置"
+                     f"🛡️ 止损: ${stop_loss:.2f}" if stop_loss else f"🚀 **开仓成功**\n\n" \
+                     f"📅 时间: {now_str()}\n" \
+                     f"📈 方向: {direction.upper()}\n" \
+                     f"💰 成交均价: ${fill_price:.2f}\n" \
+                     f"📊 数量: {quantity} 张\n" \
+                     f"🛡️ 止损: 未设置"
         send_telegram_message(tg_message)
         
         # 更新状态
@@ -509,7 +519,9 @@ def close_position(reason):
 def check_open_condition(df1h):
     """检查开仓条件"""
     if position_tracker.get('position'):
-        log.info(f"🔒 当前有持仓 {position_tracker.get('position')}，跳过开仓检查")
+        msg = f"🔒 [{now_str()}] 开仓检查 | 交易对: {SYMBOL}\n当前有持仓 {position_tracker.get('position').upper()}，跳过开仓检查"
+        log.info(msg)
+        send_telegram_message(msg)
         return None
     
     current_price = df1h['close'].iloc[-1]
@@ -518,28 +530,40 @@ def check_open_condition(df1h):
     # 检查是否站上所有均线（做多）
     above_all_ma, ma_details = is_above_all_ma(df1h, verbose=True)
     if above_all_ma:
+        msg = f"✅ [{now_str()}] 开仓检查 | 交易对: {SYMBOL}\n开多条件满足: 1h K线站上所有均线\n当前价格: ${current_price:.2f}"
         log.info(f"✅ 开多条件满足: 1h K线站上所有均线")
         for detail in ma_details:
             log.info(f"   - {detail}")
+            msg += f"\n{detail}"
+        send_telegram_message(msg)
         return 'long'
     else:
+        msg = f"❌ [{now_str()}] 开仓检查 | 交易对: {SYMBOL}\n开多条件未满足\n当前价格: ${current_price:.2f}"
         log.info(f"❌ 开多条件未满足")
         if ma_details:
             for detail in ma_details:
                 log.info(f"   - {detail}")
+                msg += f"\n{detail}"
+        send_telegram_message(msg)
     
     # 检查是否跌破所有均线（做空）
     below_all_ma, ma_details = is_below_all_ma(df1h, verbose=True)
     if below_all_ma:
+        msg = f"✅ [{now_str()}] 开仓检查 | 交易对: {SYMBOL}\n开空条件满足: 1h K线跌破所有均线\n当前价格: ${current_price:.2f}"
         log.info(f"✅ 开空条件满足: 1h K线跌破所有均线")
         for detail in ma_details:
             log.info(f"   - {detail}")
+            msg += f"\n{detail}"
+        send_telegram_message(msg)
         return 'short'
     else:
+        msg = f"❌ [{now_str()}] 开仓检查 | 交易对: {SYMBOL}\n开空条件未满足\n当前价格: ${current_price:.2f}"
         log.info(f"❌ 开空条件未满足")
         if ma_details:
             for detail in ma_details:
                 log.info(f"   - {detail}")
+                msg += f"\n{detail}"
+        send_telegram_message(msg)
     
     return None
 
@@ -547,7 +571,9 @@ def check_close_condition(df1h):
     """检查平仓条件"""
     position = position_tracker.get('position')
     if not position:
-        log.info(f"🔒 当前无持仓，跳过平仓检查")
+        msg = f"🔒 [{now_str()}] 平仓检查 | 交易对: {SYMBOL}\n当前无持仓，跳过平仓检查"
+        log.info(msg)
+        send_telegram_message(msg)
         return False
     
     current_price = df1h['close'].iloc[-1]
@@ -569,6 +595,10 @@ def check_close_condition(df1h):
     log.info(f"\n🔍 平仓条件检查 | 当前持仓: {position} | 当前价格: ${current_price:.2f}")
     log.info(f"   - 开仓价: ${entry_price:.2f} | 当前盈利: {profit_pct:.2f}% | 最高盈利: {max_profit_pct:.2f}%")
     
+    tg_message = f"🔍 [{now_str()}] 平仓检查 | 交易对: {SYMBOL}\n"
+    tg_message += f"📈 方向: {position.upper()} | 当前价格: ${current_price:.2f}\n"
+    tg_message += f"💰 开仓价: ${entry_price:.2f} | 当前盈利: {profit_pct:.2f}% | 最高盈利: {max_profit_pct:.2f}%\n"
+    
     if position == 'long':
         # 多单：跟踪波谷，跌破波谷平仓
         current_valley = get_last_valley(df1h)
@@ -579,6 +609,10 @@ def check_close_condition(df1h):
         log.info(f"   - 跟踪波谷: ${tracking_valley:.2f}" if tracking_valley else "   - 跟踪波谷: 未设置")
         log.info(f"   - 移动止损: ${trailing_stop:.2f}" if trailing_stop else "   - 移动止损: 未设置")
         
+        tg_message += f"📍 当前波谷: ${current_valley:.2f}" if current_valley else "📍 当前波谷: 未检测到\n"
+        tg_message += f"🎯 跟踪波谷: ${tracking_valley:.2f}" if tracking_valley else "🎯 跟踪波谷: 未设置\n"
+        tg_message += f"🛡️ 移动止损: ${trailing_stop:.2f}" if trailing_stop else "🛡️ 移动止损: 未设置\n"
+        
         # 移动止损逻辑：盈利超过10%时启动
         if max_profit_pct >= 10:
             if trailing_stop is None:
@@ -587,11 +621,16 @@ def check_close_condition(df1h):
                 position_tracker['trailing_stop'] = trailing_stop_price
                 save_state()
                 log.info(f"🛡️ 启动移动止损: 锁定10%利润 @ ${trailing_stop_price:.2f}")
+                tg_message += f"✅ 启动移动止损: 锁定10%利润 @ ${trailing_stop_price:.2f}\n"
             else:
                 # 检查是否触发移动止损
                 if current_price < trailing_stop:
                     log.info(f"🛡️ 移动止损触发: 当前价格 ${current_price:.2f} < 移动止损 ${trailing_stop:.2f}")
                     log.info(f"   - 锁定利润: 10.00% | 回撤: {max_profit_pct - 10:.2f}%")
+                    tg_message += f"🛡️ 平仓原因: 移动止损触发\n"
+                    tg_message += f"   - 当前价格 ${current_price:.2f} < 移动止损 ${trailing_stop:.2f}\n"
+                    tg_message += f"   - 锁定利润: 10.00% | 回撤: {max_profit_pct - 10:.2f}%\n"
+                    send_telegram_message(tg_message)
                     return True
         
         if current_valley:
@@ -600,21 +639,31 @@ def check_close_condition(df1h):
                 position_tracker['tracking_valley'] = current_valley
                 log.info(f"✅ 首次记录波谷: ${current_valley:.2f}")
                 save_state()
+                tg_message += f"✅ 首次记录波谷: ${current_valley:.2f}\n"
+                tg_message += f"✅ 不平仓原因: 等待波谷确认\n"
             else:
-                # 更新波谷（只更新更高的波谷）
-                if current_valley > tracking_valley:
-                    position_tracker['tracking_valley'] = current_valley
-                    log.info(f"📈 更新波谷: ${tracking_valley:.2f} → ${current_valley:.2f}")
-                    save_state()
-                    tracking_valley = current_valley
-                
                 # 检查是否跌破波谷
                 if tracking_valley and current_price < tracking_valley:
                     log.info(f"❌ 平仓条件满足: 当前价格 ${current_price:.2f} < 跟踪波谷 ${tracking_valley:.2f}")
                     log.info(f"   - 价格跌破幅度: {(tracking_valley - current_price):.2f} USDT ({((tracking_valley - current_price)/tracking_valley*100):.2f}%)")
+                    tg_message += f"❌ 平仓原因: 价格跌破波谷\n"
+                    tg_message += f"   - 当前价格 ${current_price:.2f} < 跟踪波谷 ${tracking_valley:.2f}\n"
+                    tg_message += f"   - 跌破幅度: {(tracking_valley - current_price):.2f} USDT ({((tracking_valley - current_price)/tracking_valley*100):.2f}%)\n"
+                    send_telegram_message(tg_message)
                     return True
-                else:
-                    log.info(f"✅ 持仓安全: 当前价格 ${current_price:.2f} >= 跟踪波谷 ${tracking_valley:.2f}" if tracking_valley else "   - 等待波谷确认")
+                
+                # 更新波谷（只更新更高的波谷，锁定利润）
+                if current_valley > tracking_valley:
+                    position_tracker['tracking_valley'] = current_valley
+                    log.info(f"🔼 更新波谷: ${tracking_valley:.2f} → ${current_valley:.2f}")
+                    save_state()
+                    tracking_valley = current_valley
+                    tg_message += f"🔼 更新波谷: ${tracking_valley:.2f} → ${current_valley:.2f}\n"
+                
+                tg_message += f"✅ 不平仓原因: 当前价格 ${current_price:.2f} >= 跟踪波谷 ${tracking_valley:.2f}\n"
+        
+        else:
+            tg_message += f"⚠️ 不平仓原因: 未检测到波谷\n"
         
     else:  # position == 'short'
         # 空单：跟踪波峰，突破波峰平仓
@@ -626,6 +675,10 @@ def check_close_condition(df1h):
         log.info(f"   - 跟踪波峰: ${tracking_peak:.2f}" if tracking_peak else "   - 跟踪波峰: 未设置")
         log.info(f"   - 移动止损: ${trailing_stop:.2f}" if trailing_stop else "   - 移动止损: 未设置")
         
+        tg_message += f"📍 当前波峰: ${current_peak:.2f}" if current_peak else "📍 当前波峰: 未检测到\n"
+        tg_message += f"🎯 跟踪波峰: ${tracking_peak:.2f}" if tracking_peak else "🎯 跟踪波峰: 未设置\n"
+        tg_message += f"🛡️ 移动止损: ${trailing_stop:.2f}" if trailing_stop else "🛡️ 移动止损: 未设置\n"
+        
         # 移动止损逻辑：盈利超过10%时启动
         if max_profit_pct >= 10:
             if trailing_stop is None:
@@ -634,11 +687,16 @@ def check_close_condition(df1h):
                 position_tracker['trailing_stop'] = trailing_stop_price
                 save_state()
                 log.info(f"🛡️ 启动移动止损: 锁定10%利润 @ ${trailing_stop_price:.2f}")
+                tg_message += f"✅ 启动移动止损: 锁定10%利润 @ ${trailing_stop_price:.2f}\n"
             else:
                 # 检查是否触发移动止损
                 if current_price > trailing_stop:
                     log.info(f"🛡️ 移动止损触发: 当前价格 ${current_price:.2f} > 移动止损 ${trailing_stop:.2f}")
                     log.info(f"   - 锁定利润: 10.00% | 回撤: {max_profit_pct - 10:.2f}%")
+                    tg_message += f"🛡️ 平仓原因: 移动止损触发\n"
+                    tg_message += f"   - 当前价格 ${current_price:.2f} > 移动止损 ${trailing_stop:.2f}\n"
+                    tg_message += f"   - 锁定利润: 10.00% | 回撤: {max_profit_pct - 10:.2f}%\n"
+                    send_telegram_message(tg_message)
                     return True
         
         if current_peak:
@@ -647,22 +705,33 @@ def check_close_condition(df1h):
                 position_tracker['tracking_peak'] = current_peak
                 log.info(f"✅ 首次记录波峰: ${current_peak:.2f}")
                 save_state()
+                tg_message += f"✅ 首次记录波峰: ${current_peak:.2f}\n"
+                tg_message += f"✅ 不平仓原因: 等待波峰确认\n"
             else:
-                # 更新波峰（只更新更低的波峰）
-                if current_peak < tracking_peak:
-                    position_tracker['tracking_peak'] = current_peak
-                    log.info(f"📉 更新波峰: ${tracking_peak:.2f} → ${current_peak:.2f}")
-                    save_state()
-                    tracking_peak = current_peak
-                
                 # 检查是否突破波峰
                 if tracking_peak and current_price > tracking_peak:
                     log.info(f"❌ 平仓条件满足: 当前价格 ${current_price:.2f} > 跟踪波峰 ${tracking_peak:.2f}")
                     log.info(f"   - 价格突破幅度: {(current_price - tracking_peak):.2f} USDT ({((current_price - tracking_peak)/tracking_peak*100):.2f}%)")
+                    tg_message += f"❌ 平仓原因: 价格突破波峰\n"
+                    tg_message += f"   - 当前价格 ${current_price:.2f} > 跟踪波峰 ${tracking_peak:.2f}\n"
+                    tg_message += f"   - 突破幅度: {(current_price - tracking_peak):.2f} USDT ({((current_price - tracking_peak)/tracking_peak*100):.2f}%)\n"
+                    send_telegram_message(tg_message)
                     return True
-                else:
-                    log.info(f"✅ 持仓安全: 当前价格 ${current_price:.2f} <= 跟踪波峰 ${tracking_peak:.2f}" if tracking_peak else "   - 等待波峰确认")
+                
+                # 更新波峰（只更新更低的波峰，锁定利润）
+                if current_peak < tracking_peak:
+                    position_tracker['tracking_peak'] = current_peak
+                    log.info(f"🔽 更新波峰: ${tracking_peak:.2f} → ${current_peak:.2f}")
+                    save_state()
+                    tracking_peak = current_peak
+                    tg_message += f"🔽 更新波峰: ${tracking_peak:.2f} → ${current_peak:.2f}\n"
+                
+                tg_message += f"✅ 不平仓原因: 当前价格 ${current_price:.2f} <= 跟踪波峰 ${tracking_peak:.2f}\n"
+        
+        else:
+            tg_message += f"⚠️ 不平仓原因: 未检测到波峰\n"
     
+    send_telegram_message(tg_message)
     return False
 
 # ==================== 主循环 ====================
@@ -729,8 +798,8 @@ def main():
                 
                 # 如果有持仓，先检查平仓条件
                 if position:
-                    # 获取日线方向
-                    _, _, daily_current_dir = get_daily_close_direction()
+                    # 获取日线方向（使用昨天已完成的K线）
+                    daily_current_dir, _ = get_daily_close_direction()
 
                     # 如果持仓方向与日线方向相反，立即平仓
                     if daily_current_dir:
@@ -751,8 +820,8 @@ def main():
                 
                 # 如果无持仓，检查开仓条件
                 else:
-                    # 获取日线方向
-                    _, _, daily_current_dir = get_daily_close_direction()
+                    # 获取日线方向（使用昨天已完成的K线）
+                    daily_current_dir, _ = get_daily_close_direction()
                     
                     open_signal = check_open_condition(df1h)
                     if open_signal:
