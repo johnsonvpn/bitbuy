@@ -312,11 +312,46 @@ def get_macd_details(df, idx=-1):
     hist = df['macd_hist'].iloc[idx]
     return kline_time, dif, dea, hist
 
+# ==================== 持仓状态同步 ====================
+def sync_position_from_exchange(exch, symbol):
+    try:
+        positions = exch.fetch_positions([symbol])
+        if positions:
+            pos = positions[0]
+            contracts = pos.get('contracts', 0)
+            side = pos.get('side')
+            if contracts > 0 and side:
+                direction = 'long' if side.lower() == 'long' else 'short'
+                if position_tracker.get('position') != direction:
+                    log.info(f"🔄 同步交易所持仓: {direction} ({contracts} contracts)")
+                    position_tracker.update({
+                        'position': direction,
+                        'open_contracts': contracts,
+                        'entry_price': pos.get('entryPrice') or pos.get('markPrice')
+                    })
+                    save_state()
+                return direction
+            else:
+                if position_tracker.get('position') is not None:
+                    log.info(f"🔄 同步交易所持仓: 空仓 (本地显示{position_tracker.get('position')})")
+                    position_tracker.update({
+                        'entry_price': None, 'entry_time': None, 'position': None,
+                        'entry_1h_macd_direction': None, 'open_contracts': None
+                    })
+                    save_state()
+                return None
+    except Exception as e:
+        log.warning(f"同步持仓失败: {e}")
+        return position_tracker.get('position')
+
 # ==================== 主策略逻辑 ====================
 def run_new_strategy_check(_, exch, symbol, fast, slow, signal, rsi_len,
-                          is_4h_check=False, is_1h_check=False):
+                          is_4h_check=False, is_1h_check=False, send_notification=True):
     global last_execution
-    # 统一使用 JST 时间显示
+    
+    # 先从交易所同步真实持仓状态
+    sync_position_from_exchange(exch, symbol)
+    
     now_str = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S")
     active = is_market_active()
     session = get_current_session()
@@ -340,127 +375,218 @@ def run_new_strategy_check(_, exch, symbol, fast, slow, signal, rsi_len,
     except:
         pass
 
-    # 使用上一根已经走完的K线判断趋势（idx=-2）
     trend_1h = get_macd_trend(df1h, idx=-2)
     trend_4h = get_macd_trend(df4h, idx=-2)
 
-    # 获取 MACD 详细数值用于调试（也使用上一根走完的K线）
     t1h_time, dif_1h, dea_1h, hist_1h = get_macd_details(df1h, idx=-2)
     t4h_time, dif_4h, dea_4h, hist_4h = get_macd_details(df4h, idx=-2)
-
-    # 调试：打印数据框的最后几行时间戳
-    if df1h is not None and len(df1h) >= 5:
-        log.debug(f"🔍 1H K线时间戳(最后5根):")
-        for i in range(-5, 0):
-            ts = df1h['timestamp'].iloc[i].tz_convert(timezone(timedelta(hours=9))).strftime("%H:%M")
-            log.debug(f"   idx={i}: {ts}")
 
     log.info(f"[{now_str}] {session} | 1H:{trend_1h}({t1h_time}) | 4H:{trend_4h}({t4h_time}) | 活跃:{active}")
     log.info(f"🔍 MACD详情: 1H=DIF:{dif_1h:.4f} DEA:{dea_1h:.4f} HIST:{hist_1h:.4f} | 4H=DIF:{dif_4h:.4f} DEA:{dea_4h:.4f} HIST:{hist_4h:.4f} | 价格:${current_price:.2f}")
 
-    # ==================== 平仓检查 ====================
-    if is_4h_check and active and position_tracker.get('position'):
-        position = position_tracker.get('position')
-        if position and trend_4h and position != trend_4h:
-            # 构建平仓推送消息
-            tg_msg = f"📊 *平仓检查报告*\n\n"
+    # 只有发送通知时才构建完整消息
+    tg_msg = None
+    position = position_tracker.get('position')
+
+    # ==================== 平仓检查（4H大方向优先）====================
+    if active and position and trend_4h:
+        if send_notification:
+            tg_msg = f"📊 *4H平仓检查报告*\n\n"
             tg_msg += f"🎯 交易对: `{symbol}`\n"
+            tg_msg += f"📅 检查时间: `{now_str}`\n"
             tg_msg += f"💰 当前价格: `${current_price:.2f}`\n\n"
-            tg_msg += f"📈 *持仓信息*\n"
-            tg_msg += f"• 持仓方向: `{position}`\n"
-            tg_msg += f"• 开仓价格: `${position_tracker.get('entry_price', 'N/A')}`\n\n"
-            tg_msg += f"🔍 *平仓条件*\n"
-            tg_msg += f"• 4H趋势: `{trend_4h}`\n"
-            tg_msg += f"• 趋势一致: ❌ 否 (持仓={position}, 4H={trend_4h})\n\n"
-            tg_msg += f"✅ *执行平仓*\n"
-            tg_msg += f"原因: 4H趋势与持仓方向不一致\n"
-            
-            close_position(f"4H趋势({trend_4h}) 与持仓方向({position})不一致")
+            tg_msg += f"📈 *MACD趋势*\n"
+            tg_msg += f"• 1H趋势: `{trend_1h}` ({t1h_time})\n"
+            tg_msg += f"• 4H趋势: `{trend_4h}` ({t4h_time})\n\n"
+            tg_msg += f"🔔 *平仓检查*\n"
+            tg_msg += f"• 当前持仓: `{position}`\n"
+            tg_msg += f"• 开仓价格: `${position_tracker.get('entry_price', 'N/A')}`\n"
+
+        if position != trend_4h:
+            log.info(f"⚡ 4H趋势({trend_4h})与持仓方向({position})不一致，立即平仓（大方向反转）")
+            close_position(f"4H趋势({trend_4h})与持仓方向({position})不一致")
             last_execution['close_triggered'] = True
-            
-            # 发送TG推送
-            send_telegram_message(tg_msg)
+            if send_notification:
+                tg_msg += f"• ✅ *平仓原因: 4H大方向反转({trend_4h})，与持仓({position})相反*\n"
+                tg_msg += f"• 优先级: 高（4H是大方向）\n"
+        else:
+            if send_notification:
+                tg_msg += f"• ❌ *不平仓原因: 4H趋势({trend_4h})与持仓方向({position})一致*\n"
+                tg_msg += f"• 大方向确认: 持仓安全\n"
 
     # ==================== 开仓检查 ====================
-    if is_1h_check and active and not position_tracker.get('position') and trend_1h and trend_4h:
-        # 获取时间戳（对应 idx=-2）
-        prev_1h_ts = df1h['timestamp'].iloc[-3].tz_convert(timezone(timedelta(hours=9))).strftime("%H:%M") if df1h is not None and len(df1h) > 2 else "N/A"
-        prev_2h_ts = df1h['timestamp'].iloc[-4].tz_convert(timezone(timedelta(hours=9))).strftime("%H:%M") if df1h is not None and len(df1h) > 3 else "N/A"
-        prev_3h_ts = df1h['timestamp'].iloc[-5].tz_convert(timezone(timedelta(hours=9))).strftime("%H:%M") if df1h is not None and len(df1h) > 4 else "N/A"
+    if is_1h_check and active and not position and trend_1h and trend_4h:
+        if send_notification:
+            tg_msg = f"📊 *1H开仓检查报告*\n\n"
+            tg_msg += f"🎯 交易对: `{symbol}`\n"
+            tg_msg += f"📅 检查时间: `{now_str}`\n"
+            tg_msg += f"💰 当前价格: `${current_price:.2f}`\n\n"
+            tg_msg += f"📈 *MACD趋势*\n"
+            tg_msg += f"• 1H趋势: `{trend_1h}` ({t1h_time})\n"
+            tg_msg += f"• 4H趋势: `{trend_4h}` ({t4h_time})\n\n"
 
-        # 构建基础推送消息
-        tg_msg = f"📊 *策略检查报告*\n\n"
-        tg_msg += f"🎯 交易对: `{symbol}`\n"
-        tg_msg += f"💰 当前价格: `${current_price:.2f}`\n\n"
-        tg_msg += f"📈 *MACD趋势*\n"
-        tg_msg += f"• 1H趋势: `{trend_1h}` ({t1h_time})\n"
-        tg_msg += f"• 4H趋势: `{trend_4h}` ({t4h_time})\n\n"
-        tg_msg += f"🔍 *开仓条件检查*\n"
-
-        # 检查1H反转：当前趋势(idx=-2) vs 前一根趋势(idx=-3)
         prev_1h = get_macd_trend(df1h, -3) if df1h is not None and len(df1h) > 2 else None
         has_1h_reversal = prev_1h is not None and trend_1h != prev_1h
-        
-        # 检查4H反转：当前趋势(idx=-2) vs 前一根趋势(idx=-3)
+
         prev_4h = get_macd_trend(df4h, -3) if df4h is not None and len(df4h) > 2 else None
         has_4h_reversal = prev_4h is not None and trend_4h != prev_4h
 
-        if has_1h_reversal:
-            # 1H反转逻辑（原逻辑）
-            reversal_recent = False
+        if send_notification:
+            tg_msg += f"🚀 *开仓检查*\n"
+            tg_msg += f"• 1H反转: {'✅ 有' if has_1h_reversal else '❌ 无'}\n"
+            tg_msg += f"• 4H反转: {'✅ 有' if has_4h_reversal else '❌ 无'}\n"
+            tg_msg += f"• 1H趋势: `{trend_1h}`\n"
+            tg_msg += f"• 4H趋势: `{trend_4h}`\n"
+
+        if has_4h_reversal and trend_1h == trend_4h:
+            # 4H反转详情：跨越了多少根K线
+            reversal_4h_klines = 1
+            prev_4h_2 = get_macd_trend(df4h, -4) if df4h is not None and len(df4h) >= 4 else None
+            prev_4h_3 = get_macd_trend(df4h, -5) if df4h is not None and len(df4h) >= 5 else None
+            
+            if df4h is not None and len(df4h) >= 6:
+                if prev_4h == prev_4h_2 and prev_4h_2 == prev_4h_3:
+                    reversal_4h_klines = 3
+                elif prev_4h != prev_4h_2:
+                    reversal_4h_klines = 2
+            elif df4h is not None and len(df4h) >= 5:
+                if prev_4h != prev_4h_2:
+                    reversal_4h_klines = 2
+            
+            log.info(f"⚡ 4H反转({prev_4h}→{trend_4h}) + 1H同向({trend_1h}) → 执行开仓")
+            if send_notification:
+                tg_msg += f"\n✅ *开仓原因: 4H反转 + 1H同向*\n"
+                tg_msg += f"• 4H: {prev_4h} → {trend_4h}（{reversal_4h_klines}根K线）\n"
+                tg_msg += f"• 1H: {trend_1h}（同向）\n"
+            if current_price:
+                open_position(trend_4h, current_price, trend_4h)
+                if send_notification:
+                    tg_msg += f"• 执行: `{trend_4h}` @ `${current_price:.2f}`\n"
+        elif has_4h_reversal and trend_1h != trend_4h:
+            # 4H有反转但1H不同向
+            reversal_4h_klines = 1
+            prev_4h_2 = get_macd_trend(df4h, -4) if df4h is not None and len(df4h) >= 4 else None
+            prev_4h_3 = get_macd_trend(df4h, -5) if df4h is not None and len(df4h) >= 5 else None
+            
+            if df4h is not None and len(df4h) >= 6:
+                if prev_4h == prev_4h_2 and prev_4h_2 == prev_4h_3:
+                    reversal_4h_klines = 3
+                elif prev_4h != prev_4h_2:
+                    reversal_4h_klines = 2
+            elif df4h is not None and len(df4h) >= 5:
+                if prev_4h != prev_4h_2:
+                    reversal_4h_klines = 2
+            
+            log.info(f"⚠️ 4H反转({prev_4h}→{trend_4h})但1H不同向({trend_1h})，拒绝开仓")
+            if send_notification:
+                tg_msg += f"\n❌ *不开仓原因: 4H反转但1H不同向*\n"
+                tg_msg += f"• 4H: {prev_4h} → {trend_4h}（{reversal_4h_klines}根K线）\n"
+                tg_msg += f"• 1H: {trend_1h}\n"
+                tg_msg += f"• 策略要求: 4H反转时1H必须同向\n"
+        elif has_1h_reversal:
+            # 计算反转跨越了多少根K线
+            reversal_klines = 1  # 至少1根K线
             prev_2h = get_macd_trend(df1h, -4) if df1h is not None and len(df1h) >= 4 else None
             prev_3h = get_macd_trend(df1h, -5) if df1h is not None and len(df1h) >= 5 else None
+            
+            # 反转时效判断：反转不超过2根K线是安全的
+            reversal_recent = False
+            reversal_detail = ""
+            
             if df1h is not None and len(df1h) >= 6:
-                reversal_recent = (prev_1h != prev_2h) or (prev_2h != prev_3h and prev_1h == prev_2h)
+                # 检查反转是否新鲜（不超过2根K线）
+                if prev_1h == prev_2h and prev_2h == prev_3h:
+                    # 连续3根相同 → 反转跨越了3根K线
+                    reversal_klines = 3
+                    reversal_recent = False
+                    reversal_detail = f"反转跨越了3根K线（{prev_1h}→{trend_1h}），追高风险较高"
+                elif prev_1h != prev_2h:
+                    # 只跨越了2根K线，可以接受
+                    reversal_klines = 2
+                    reversal_recent = True
+                    reversal_detail = f"反转跨越了2根K线（{prev_1h}→{trend_1h}），可接受"
+                else:
+                    # 1根K线反转，最新鲜
+                    reversal_klines = 1
+                    reversal_recent = True
+                    reversal_detail = f"反转仅跨越1根K线（{prev_1h}→{trend_1h}），信号新鲜"
+            elif df1h is not None and len(df1h) >= 5:
+                if prev_1h != prev_2h:
+                    reversal_klines = 2
+                    reversal_recent = True
+                    reversal_detail = f"反转跨越了2根K线（{prev_1h}→{trend_1h}），可接受"
+                else:
+                    reversal_klines = 1
+                    reversal_recent = True
+                    reversal_detail = f"反转仅跨越1根K线（{prev_1h}→{trend_1h}），信号新鲜"
             else:
                 reversal_recent = True
+                reversal_detail = f"反转跨越1根K线（{prev_1h}→{trend_1h}）"
 
-            log.info(f"📋 反转分析: 当前({df1h_ts})={trend_1h} vs 上根({prev_1h_ts})={prev_1h} vs 上上根({prev_2h_ts})={prev_2h} vs 上上上根({prev_3h_ts})={prev_3h}")
-
-            tg_msg += f"• 1H反转: ✅ `{prev_1h}` → `{trend_1h}`\n"
-            tg_msg += f"• 4H反转: {'✅ 有' if has_4h_reversal else '❌ 无'}\n"
-            tg_msg += f"• 反转时效: {'✅ 新鲜' if reversal_recent else '⚠️ 过期'}\n"
-            tg_msg += f"• 4H一致: {'✅ 是' if trend_4h == trend_1h else '❌ 否'}\n\n"
+            if send_notification:
+                tg_msg += f"• 反转详情: {reversal_detail}\n"
 
             if reversal_recent and trend_4h == trend_1h:
                 log.info(f"⚡ 1H反转({prev_1h}→{trend_1h}) + 4H同向({trend_4h}) → 执行开仓")
-                tg_msg += f"✅ *开仓执行*\n"
-                tg_msg += f"方向: `{trend_1h}`\n"
+                if send_notification:
+                    tg_msg += f"\n✅ *开仓原因: 1H反转 + 4H同向*\n"
+                    tg_msg += f"• 1H: {prev_1h} → {trend_1h}（{reversal_klines}根K线）\n"
+                    tg_msg += f"• 4H: {trend_4h}（同向）\n"
                 if current_price:
                     open_position(trend_1h, current_price, trend_1h)
-                    tg_msg += f"状态: ✅ 成功\n"
+                    if send_notification:
+                        tg_msg += f"• 执行: `{trend_1h}` @ `${current_price:.2f}`\n"
             elif not reversal_recent:
-                log.info(f"⚠️ 1H反转({prev_1h}→{trend_1h})但超过2根K线（追高风险），拒绝开仓")
-                tg_msg += f"❌ *拒绝开仓*\n"
-                tg_msg += f"原因: 反转超过2根K线，追高风险\n"
+                log.info(f"⚠️ 1H反转但超过2根K线，拒绝开仓")
+                if send_notification:
+                    tg_msg += f"\n❌ *不开仓原因: {reversal_detail}*\n"
+                    tg_msg += f"• 策略要求: 反转不超过2根K线\n"
+                    tg_msg += f"• 当前情况: 反转跨越了{reversal_klines}根K线\n"
             elif trend_4h != trend_1h:
-                log.info(f"⚠️ 1H反转({prev_1h}→{trend_1h})但4H方向不一致({trend_4h})，拒绝开仓")
-                tg_msg += f"❌ *拒绝开仓*\n"
-                tg_msg += f"原因: 4H趋势不一致 (1H={trend_1h}, 4H={trend_4h})\n"
-        elif has_4h_reversal and trend_1h == trend_4h:
-            # 4H反转 + 1H同向也可以开仓
-            log.info(f"⚡ 4H反转({prev_4h}→{trend_4h}) + 1H同向({trend_1h}) → 执行开仓")
-            
-            tg_msg += f"• 1H反转: {'✅ 有' if has_1h_reversal else '❌ 无'}\n"
-            tg_msg += f"• 4H反转: ✅ `{prev_4h}` → `{trend_4h}`\n"
-            tg_msg += f"• 1H一致: ✅ 是\n\n"
-            tg_msg += f"✅ *开仓执行*\n"
-            tg_msg += f"方向: `{trend_4h}`\n"
-            if current_price:
-                open_position(trend_4h, current_price, trend_4h)
-                tg_msg += f"状态: ✅ 成功\n"
+                log.info(f"⚠️ 1H反转但4H方向不一致，拒绝开仓")
+                if send_notification:
+                    tg_msg += f"\n❌ *不开仓原因: 4H与1H趋势不一致*\n"
+                    tg_msg += f"• 1H趋势: {trend_1h}\n"
+                    tg_msg += f"• 4H趋势: {trend_4h}\n"
+                    tg_msg += f"• 策略要求: 1H反转时4H必须同向\n"
         else:
-            tg_msg += f"• 1H反转: {'✅ 有' if has_1h_reversal else '❌ 无'}\n"
-            tg_msg += f"• 4H反转: {'✅ 有' if has_4h_reversal else '❌ 无'}\n"
-            if prev_1h:
-                tg_msg += f"  1H当前趋势 `{trend_1h}` 与前一根 `{prev_1h}` 相同\n"
-            tg_msg += f"\n⏸️ *不满足开仓条件*\n"
-            if not has_1h_reversal and not has_4h_reversal:
-                tg_msg += f"原因: 未检测到1H或4H趋势反转\n"
-            elif trend_1h != trend_4h:
-                tg_msg += f"原因: 1H趋势({trend_1h})与4H趋势({trend_4h})不一致\n"
+            if send_notification:
+                tg_msg += f"\n❌ *不开仓原因: 未检测到有效反转信号*\n\n"
+                
+                # 详细说明1H状态
+                if not has_1h_reversal and prev_1h:
+                    # 计算1H趋势持续了多少根K线
+                    cont_1h = 1
+                    prev_1h_2 = get_macd_trend(df1h, -4) if df1h is not None and len(df1h) >= 4 else None
+                    prev_1h_3 = get_macd_trend(df1h, -5) if df1h is not None and len(df1h) >= 5 else None
+                    if prev_1h == prev_1h_2:
+                        cont_1h = 2
+                        if prev_1h_2 == prev_1h_3:
+                            cont_1h = 3
+                    tg_msg += f"• 1H趋势: `{trend_1h}` 持续了{cont_1h}根K线，未反转\n"
+                    tg_msg += f"  → K线序列: {prev_1h_3 if prev_1h_3 else '?'} → {prev_1h_2 if prev_1h_2 else '?'} → {prev_1h} → {trend_1h}\n"
+                
+                # 详细说明4H状态
+                if not has_4h_reversal and prev_4h:
+                    cont_4h = 1
+                    prev_4h_2 = get_macd_trend(df4h, -4) if df4h is not None and len(df4h) >= 4 else None
+                    prev_4h_3 = get_macd_trend(df4h, -5) if df4h is not None and len(df4h) >= 5 else None
+                    if prev_4h == prev_4h_2:
+                        cont_4h = 2
+                        if prev_4h_2 == prev_4h_3:
+                            cont_4h = 3
+                    tg_msg += f"• 4H趋势: `{trend_4h}` 持续了{cont_4h}根K线，未反转\n"
+                    tg_msg += f"  → K线序列: {prev_4h_3 if prev_4h_3 else '?'} → {prev_4h_2 if prev_4h_2 else '?'} → {prev_4h} → {trend_4h}\n"
+                
+                # 趋势一致性说明
+                if trend_1h != trend_4h:
+                    tg_msg += f"\n• 趋势不一致: 1H={trend_1h}, 4H={trend_4h}\n"
 
-        # 发送TG推送
+    # 发送通知
+    if send_notification and tg_msg:
+        tg_msg += f"\n📊 *市场状态*\n"
+        tg_msg += f"• 交易时段: `{session}`\n"
+        tg_msg += f"• 市场活跃: {'✅ 是' if active else '❌ 否'}\n"
         send_telegram_message(tg_msg)
 
     last_execution.update({

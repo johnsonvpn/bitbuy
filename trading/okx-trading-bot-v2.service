@@ -1,0 +1,13 @@
+[Unit]
+Description=OKX Trading Bot v2
+After=network.target
+
+[Service]
+User=johnsontang
+WorkingDirectory=/home/johnsontang/okx_local_strategy
+ExecStart=/home/johnsontang/okx_local_strategy/venv/bin/python /home/johnsontang/okx_local_strategy/okx_trading_bot_v2.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

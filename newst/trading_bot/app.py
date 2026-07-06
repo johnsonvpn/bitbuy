@@ -64,7 +64,7 @@ def index():
         try:
             run_new_strategy_check(position_tracker.get('position'), exchange, SYMBOL,
                                    MACD_FAST, MACD_SLOW, MACD_SIGNAL, RSI_LENGTH,
-                                   is_4h_check=True, is_1h_check=True)
+                                   is_4h_check=False, is_1h_check=False, send_notification=False)
         except:
             pass
 
@@ -208,12 +208,12 @@ def run_bot():
                     )
                     last_1h_check = now_utc
 
-        # 每小时刷新一次面板数据
+        # 每小时刷新一次面板数据（不发送通知）
         if m == 0 and 10 <= s <= 20:
             try:
                 run_new_strategy_check(position_tracker.get('position'), exchange, SYMBOL,
                                        MACD_FAST, MACD_SLOW, MACD_SIGNAL, RSI_LENGTH,
-                                       False, False)
+                                       is_4h_check=False, is_1h_check=False, send_notification=False)
             except:
                 pass
 

@@ -67,6 +67,9 @@ position_tracker = {
     'entry_time': None,         # 开仓时间
     'tracking_valley': None,    # 跟踪的波谷价格（多单）
     'tracking_peak': None,      # 跟踪的波峰价格（空单）
+    'trailing_stop': None,      # 移动止损价格
+    'max_profit_pct': 0,        # 最高盈利百分比
+    'breakeven_stage': 0,       # 保本止损阶段: 0=未启动, 1=保本, 2=锁定1%
     'last_trade_loss': False,   # 上次交易是否亏损
     'total_profit': 0,          # 总盈亏
     'trade_count': 0,           # 交易次数
@@ -163,7 +166,7 @@ def load_state():
         log.info("未找到状态文件，使用默认配置")
 
 def calculate_indicators(df, timeframe):
-    """计算均线指标"""
+    """计算均线指标和ATR"""
     min_required = max(MA_WINDOWS)
     if len(df) < min_required:
         log.warning(f"数据点不足 [{timeframe}]: 当前{len(df)}根, 需要至少{min_required}根")
@@ -173,8 +176,27 @@ def calculate_indicators(df, timeframe):
     for window in MA_WINDOWS:
         df[f'ma{window}'] = df['close'].rolling(window=window).mean()
         df[f'ema{window}'] = df['close'].ewm(span=window, adjust=True).mean()
-    
+
+    # 【优化A】计算ATR（平均真实波幅）用于动态止损
+    df['tr'] = df.apply(
+        lambda row: max(
+            row['high'] - row['low'],
+            abs(row['high'] - row['close']),
+            abs(row['low'] - row['close'])
+        ), axis=1
+    )
+    df['atr'] = df['tr'].rolling(window=14).mean()
+
     return df
+
+def get_atr(df1h):
+    """获取当前14周期ATR值"""
+    if len(df1h) < 14 or 'atr' not in df1h.columns:
+        return None
+    atr = df1h['atr'].iloc[-1]
+    if pd.isna(atr) or atr is None:
+        return None
+    return float(atr)
 
 def fetch_klines(symbol, timeframe, limit=100, retries=3):
     """获取K线数据（带重试机制）"""
@@ -403,7 +425,10 @@ def open_position(direction, price, stop_loss):
         position_tracker['position'] = direction
         position_tracker['entry_price'] = fill_price
         position_tracker['entry_time'] = now_str()
-        
+        position_tracker['trailing_stop'] = None      # 重置移动止损
+        position_tracker['max_profit_pct'] = 0    # 重置最高盈利
+        position_tracker['breakeven_stage'] = 0    # 重置保本止损阶段
+
         # 初始止损点设置（即您说的：止损点为上一个波谷/波峰）
         if direction == 'long':
             position_tracker['tracking_valley'] = stop_loss
@@ -494,7 +519,8 @@ def close_position(reason):
                      f"📈 方向: {side.upper()}\n" \
                      f"💰 开仓价: ${entry_price:.2f}\n" \
                      f"💵 平仓价: ${exit_price:.2f}\n" \
-                     f"📊 结果: {'✅ 盈利' if profit >= 0 else '❌ 亏损'} ${profit:.2f}"
+                     f"📊 结果: {'✅ 盈利' if profit >= 0 else '❌ 亏损'} ${profit:.2f}\n" \
+                     f"📝 平仓原因: {reason}"
         send_telegram_message(tg_message)
         
         # 更新状态
@@ -505,6 +531,7 @@ def close_position(reason):
         position_tracker['tracking_peak'] = None
         position_tracker['trailing_stop'] = None
         position_tracker['max_profit_pct'] = 0
+        position_tracker['breakeven_stage'] = 0
         position_tracker['last_trade_loss'] = (profit < 0)
         position_tracker['total_profit'] += profit
         position_tracker['trade_count'] += 1
@@ -604,15 +631,38 @@ def check_close_condition(df1h):
         current_valley = get_last_valley(df1h)
         tracking_valley = position_tracker.get('tracking_valley')
         trailing_stop = position_tracker.get('trailing_stop')
-        
+        breakeven_stage = position_tracker.get('breakeven_stage', 0)  # 0=未启动, 1=保本, 2=锁定1%
+
         log.info(f"   - 当前波谷: ${current_valley:.2f}" if current_valley else "   - 当前波谷: 未检测到")
         log.info(f"   - 跟踪波谷: ${tracking_valley:.2f}" if tracking_valley else "   - 跟踪波谷: 未设置")
         log.info(f"   - 移动止损: ${trailing_stop:.2f}" if trailing_stop else "   - 移动止损: 未设置")
-        
+        log.info(f"   - 保本阶段: {breakeven_stage}")
+
         tg_message += f"📍 当前波谷: ${current_valley:.2f}" if current_valley else "📍 当前波谷: 未检测到\n"
         tg_message += f"🎯 跟踪波谷: ${tracking_valley:.2f}" if tracking_valley else "🎯 跟踪波谷: 未设置\n"
         tg_message += f"🛡️ 移动止损: ${trailing_stop:.2f}" if trailing_stop else "🛡️ 移动止损: 未设置\n"
-        
+
+        # 【优化B-1】保本止损：盈利达到3%时，将止损移动到开仓价+1%（锁定至少1%盈利）
+        if max_profit_pct >= 3 and tracking_valley is not None and tracking_valley < entry_price * 1.01:
+            new_stop = entry_price * 1.01
+            old_stop = tracking_valley
+            position_tracker['tracking_valley'] = new_stop
+            position_tracker['breakeven_stage'] = 2
+            save_state()
+            tracking_valley = new_stop
+            log.info(f"🛡️ 保本止损阶段2: 最高盈利{max_profit_pct:.2f}% >= 3%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价+1%）")
+            tg_message += f"🛡️ 保本止损: 止损 ${old_stop:.2f} → ${new_stop:.2f}（锁定1%盈利）\n"
+        # 【优化B-2】盈利达到1%时，将止损移动到开仓价（保本）
+        elif max_profit_pct >= 1 and tracking_valley is not None and tracking_valley < entry_price and breakeven_stage < 1:
+            new_stop = entry_price
+            old_stop = tracking_valley
+            position_tracker['tracking_valley'] = new_stop
+            position_tracker['breakeven_stage'] = 1
+            save_state()
+            tracking_valley = new_stop
+            log.info(f"🛡️ 保本止损阶段1: 最高盈利{max_profit_pct:.2f}% >= 1%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价）")
+            tg_message += f"🛡️ 保本止损: 止损 ${old_stop:.2f} → ${new_stop:.2f}（保本）\n"
+
         # 移动止损逻辑：盈利超过10%时启动
         if max_profit_pct >= 10:
             if trailing_stop is None:
@@ -632,7 +682,7 @@ def check_close_condition(df1h):
                     tg_message += f"   - 锁定利润: 10.00% | 回撤: {max_profit_pct - 10:.2f}%\n"
                     send_telegram_message(tg_message)
                     return True
-        
+
         if current_valley:
             if tracking_valley is None:
                 # 首次设置波谷
@@ -651,17 +701,27 @@ def check_close_condition(df1h):
                     tg_message += f"   - 跌破幅度: {(tracking_valley - current_price):.2f} USDT ({((tracking_valley - current_price)/tracking_valley*100):.2f}%)\n"
                     send_telegram_message(tg_message)
                     return True
-                
-                # 更新波谷（只更新更高的波谷，锁定利润）
+
+                # 【优化A】更新波谷：盈利超过0.3%才开始更新，且新波谷比当前跟踪波谷高0.3%以上
                 if current_valley > tracking_valley:
-                    position_tracker['tracking_valley'] = current_valley
-                    log.info(f"🔼 更新波谷: ${tracking_valley:.2f} → ${current_valley:.2f}")
-                    save_state()
-                    tracking_valley = current_valley
-                    tg_message += f"🔼 更新波谷: ${tracking_valley:.2f} → ${current_valley:.2f}\n"
-                
+                    min_update_pct = 0.003  # 0.3% 最小更新幅度
+                    profit_threshold = 0.3  # 0.3% 盈利门槛（从0.5%降低）
+                    valley_diff_pct = (current_valley - tracking_valley) / tracking_valley * 100
+                    if max_profit_pct >= profit_threshold and valley_diff_pct >= min_update_pct * 100:
+                        position_tracker['tracking_valley'] = current_valley
+                        log.info(f"🔼 更新波谷: ${tracking_valley:.2f} → ${current_valley:.2f} (盈利{max_profit_pct:.2f}% >= {profit_threshold}%, 波谷差{valley_diff_pct:.2f}% >= {min_update_pct*100:.1f}%)")
+                        save_state()
+                        tracking_valley = current_valley
+                        tg_message += f"🔼 更新波谷: ${tracking_valley:.2f} → ${current_valley:.2f}\n"
+                    elif max_profit_pct < profit_threshold:
+                        log.info(f"⏸️ 暂不更新波谷: ${tracking_valley:.2f} → ${current_valley:.2f} (盈利{max_profit_pct:.2f}% < {profit_threshold}%，延迟更新)")
+                        tg_message += f"⏸️ 暂不更新波谷: 盈利{max_profit_pct:.2f}% < {profit_threshold}%\n"
+                    else:
+                        log.info(f"⏸️ 暂不更新波谷: ${tracking_valley:.2f} → ${current_valley:.2f} (波谷差{valley_diff_pct:.2f}% < {min_update_pct*100:.1f}%，幅度太小)")
+                        tg_message += f"⏸️ 暂不更新波谷: 波谷差{valley_diff_pct:.2f}% < {min_update_pct*100:.1f}%\n"
+
                 tg_message += f"✅ 不平仓原因: 当前价格 ${current_price:.2f} >= 跟踪波谷 ${tracking_valley:.2f}\n"
-        
+
         else:
             tg_message += f"⚠️ 不平仓原因: 未检测到波谷\n"
         
@@ -670,15 +730,38 @@ def check_close_condition(df1h):
         current_peak = get_last_peak(df1h)
         tracking_peak = position_tracker.get('tracking_peak')
         trailing_stop = position_tracker.get('trailing_stop')
-        
+        breakeven_stage = position_tracker.get('breakeven_stage', 0)  # 0=未启动, 1=保本, 2=锁定1%
+
         log.info(f"   - 当前波峰: ${current_peak:.2f}" if current_peak else "   - 当前波峰: 未检测到")
         log.info(f"   - 跟踪波峰: ${tracking_peak:.2f}" if tracking_peak else "   - 跟踪波峰: 未设置")
         log.info(f"   - 移动止损: ${trailing_stop:.2f}" if trailing_stop else "   - 移动止损: 未设置")
-        
+        log.info(f"   - 保本阶段: {breakeven_stage}")
+
         tg_message += f"📍 当前波峰: ${current_peak:.2f}" if current_peak else "📍 当前波峰: 未检测到\n"
         tg_message += f"🎯 跟踪波峰: ${tracking_peak:.2f}" if tracking_peak else "🎯 跟踪波峰: 未设置\n"
         tg_message += f"🛡️ 移动止损: ${trailing_stop:.2f}" if trailing_stop else "🛡️ 移动止损: 未设置\n"
-        
+
+        # 【优化B-1】保本止损：盈利达到3%时，将止损移动到开仓价-1%（锁定至少1%盈利）
+        if max_profit_pct >= 3 and tracking_peak is not None and tracking_peak > entry_price * 0.99:
+            new_stop = entry_price * 0.99
+            old_stop = tracking_peak
+            position_tracker['tracking_peak'] = new_stop
+            position_tracker['breakeven_stage'] = 2
+            save_state()
+            tracking_peak = new_stop
+            log.info(f"🛡️ 保本止损阶段2: 最高盈利{max_profit_pct:.2f}% >= 3%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价-1%）")
+            tg_message += f"🛡️ 保本止损: 止损 ${old_stop:.2f} → ${new_stop:.2f}（锁定1%盈利）\n"
+        # 【优化B-2】盈利达到1%时，将止损移动到开仓价（保本）
+        elif max_profit_pct >= 1 and tracking_peak is not None and tracking_peak > entry_price and breakeven_stage < 1:
+            new_stop = entry_price
+            old_stop = tracking_peak
+            position_tracker['tracking_peak'] = new_stop
+            position_tracker['breakeven_stage'] = 1
+            save_state()
+            tracking_peak = new_stop
+            log.info(f"🛡️ 保本止损阶段1: 最高盈利{max_profit_pct:.2f}% >= 1%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价）")
+            tg_message += f"🛡️ 保本止损: 止损 ${old_stop:.2f} → ${new_stop:.2f}（保本）\n"
+
         # 移动止损逻辑：盈利超过10%时启动
         if max_profit_pct >= 10:
             if trailing_stop is None:
@@ -698,7 +781,7 @@ def check_close_condition(df1h):
                     tg_message += f"   - 锁定利润: 10.00% | 回撤: {max_profit_pct - 10:.2f}%\n"
                     send_telegram_message(tg_message)
                     return True
-        
+
         if current_peak:
             if tracking_peak is None:
                 # 首次设置波峰
@@ -717,17 +800,27 @@ def check_close_condition(df1h):
                     tg_message += f"   - 突破幅度: {(current_price - tracking_peak):.2f} USDT ({((current_price - tracking_peak)/tracking_peak*100):.2f}%)\n"
                     send_telegram_message(tg_message)
                     return True
-                
-                # 更新波峰（只更新更低的波峰，锁定利润）
+
+                # 【优化A】更新波峰：盈利超过0.3%才开始更新，且新波峰比当前跟踪波峰低0.3%以上
                 if current_peak < tracking_peak:
-                    position_tracker['tracking_peak'] = current_peak
-                    log.info(f"🔽 更新波峰: ${tracking_peak:.2f} → ${current_peak:.2f}")
-                    save_state()
-                    tracking_peak = current_peak
-                    tg_message += f"🔽 更新波峰: ${tracking_peak:.2f} → ${current_peak:.2f}\n"
-                
+                    min_update_pct = 0.003  # 0.3% 最小更新幅度
+                    profit_threshold = 0.3  # 0.3% 盈利门槛（从0.5%降低）
+                    peak_diff_pct = (tracking_peak - current_peak) / tracking_peak * 100
+                    if max_profit_pct >= profit_threshold and peak_diff_pct >= min_update_pct * 100:
+                        position_tracker['tracking_peak'] = current_peak
+                        log.info(f"🔽 更新波峰: ${tracking_peak:.2f} → ${current_peak:.2f} (盈利{max_profit_pct:.2f}% >= {profit_threshold}%, 波峰差{peak_diff_pct:.2f}% >= {min_update_pct*100:.1f}%)")
+                        save_state()
+                        tracking_peak = current_peak
+                        tg_message += f"🔽 更新波峰: ${tracking_peak:.2f} → ${current_peak:.2f}\n"
+                    elif max_profit_pct < profit_threshold:
+                        log.info(f"⏸️ 暂不更新波峰: ${tracking_peak:.2f} → ${current_peak:.2f} (盈利{max_profit_pct:.2f}% < {profit_threshold}%，延迟更新)")
+                        tg_message += f"⏸️ 暂不更新波峰: 盈利{max_profit_pct:.2f}% < {profit_threshold}%\n"
+                    else:
+                        log.info(f"⏸️ 暂不更新波峰: ${tracking_peak:.2f} → ${current_peak:.2f} (波峰差{peak_diff_pct:.2f}% < {min_update_pct*100:.1f}%，幅度太小)")
+                        tg_message += f"⏸️ 暂不更新波峰: 波峰差{peak_diff_pct:.2f}% < {min_update_pct*100:.1f}%\n"
+
                 tg_message += f"✅ 不平仓原因: 当前价格 ${current_price:.2f} <= 跟踪波峰 ${tracking_peak:.2f}\n"
-        
+
         else:
             tg_message += f"⚠️ 不平仓原因: 未检测到波峰\n"
     
@@ -801,15 +894,32 @@ def main():
                     # 获取日线方向（使用昨天已完成的K线）
                     daily_current_dir, _ = get_daily_close_direction()
 
-                    # 如果持仓方向与日线方向相反，立即平仓
+                    # 如果持仓方向与日线方向相反，检查是否需要平仓
                     if daily_current_dir:
-                        if (position == 'short' and daily_current_dir == 'long') or \
-                           (position == 'long' and daily_current_dir == 'short'):
-                            log.warning(f"🚨 日线方向与持仓相反: 持仓={position} | 日线方向={daily_current_dir} | 立即平仓!")
-                            if close_position('日线方向相反平仓'):
-                                check_executed = True
-                                time.sleep(1)
-                                continue
+                        if position == 'long' and daily_current_dir == 'short':
+                            # 多单但日线空头：检查最低价是否跌破波谷
+                            current_valley = get_last_valley(df1h)
+                            current_low = df1h['low'].iloc[-1]
+                            if current_valley and current_low < current_valley:
+                                log.warning(f"🚨 日线方向与持仓相反: 持仓={position} | 日线方向={daily_current_dir} | 最低价 ${current_low:.2f} 跌破波谷 ${current_valley:.2f}，平仓!")
+                                if close_position('日线方向相反且最低价跌破波谷'):
+                                    check_executed = True
+                                    time.sleep(1)
+                                    continue
+                            else:
+                                log.info(f"⚠️ 日线方向与持仓相反: 持仓={position} | 日线方向={daily_current_dir} | 但最低价 ${current_low:.2f} 未跌破波谷 ${current_valley:.2f}，继续持有")
+                        elif position == 'short' and daily_current_dir == 'long':
+                            # 空单但日线多头：检查最高价是否突破波峰
+                            current_peak = get_last_peak(df1h)
+                            current_high = df1h['high'].iloc[-1]
+                            if current_peak and current_high > current_peak:
+                                log.warning(f"🚨 日线方向与持仓相反: 持仓={position} | 日线方向={daily_current_dir} | 最高价 ${current_high:.2f} 突破波峰 ${current_peak:.2f}，平仓!")
+                                if close_position('日线方向相反且最高价突破波峰'):
+                                    check_executed = True
+                                    time.sleep(1)
+                                    continue
+                            else:
+                                log.info(f"⚠️ 日线方向与持仓相反: 持仓={position} | 日线方向={daily_current_dir} | 但最高价 ${current_high:.2f} 未突破波峰 ${current_peak:.2f}，继续持有")
 
                     if check_close_condition(df1h):
                         if close_position('跌破波谷/突破波峰'):
@@ -825,25 +935,36 @@ def main():
                     
                     open_signal = check_open_condition(df1h)
                     if open_signal:
+                        # 【方案4优化A】使用ATR动态止损代替波峰波谷
+                        atr = get_atr(df1h)
+                        atr_multiplier = 2.0  # ATR倍数
+                        if atr is None or atr < 0.1:
+                            # ATR不可用时，使用固定2%止损
+                            log.warning(f"⚠️ ATR不可用，使用固定2%止损")
+                            stop_loss_long = current_price * 0.98
+                            stop_loss_short = current_price * 1.02
+                        else:
+                            stop_loss_long = current_price - atr * atr_multiplier
+                            stop_loss_short = current_price + atr * atr_multiplier
+                            log.info(f"📍 ATR动态止损: ATR=${atr:.2f}, ×{atr_multiplier}")
+
                         # 根据日线方向过滤开仓信号
                         if daily_current_dir == 'long' and open_signal == 'long':
-                            log.info(f"📗 日线多头: 开多仓信号确认")
-                            stop_loss = get_last_valley(df1h)
-                            if stop_loss:
-                                open_position(open_signal, current_price, stop_loss)
-                            else:
-                                log.warning(f"❌ 未找到初始止损点（波谷），放弃开仓")
+                            log.info(f"� 日线多头: 开多仓信号确认")
+                            log.info(f"📍 初始止损(ATR×2): ${stop_loss_long:.2f} (距离开仓价${current_price-stop_loss_long:.2f}, {(current_price-stop_loss_long)/current_price*100:.2f}%)")
+                            open_position(open_signal, current_price, stop_loss_long)
                         elif daily_current_dir == 'short' and open_signal == 'short':
                             log.info(f"📕 日线空头: 开空仓信号确认")
-                            stop_loss = get_last_peak(df1h)
-                            if stop_loss:
-                                open_position(open_signal, current_price, stop_loss)
-                            else:
-                                log.warning(f"❌ 未找到初始止损点（波峰），放弃开仓")
+                            log.info(f"📍 初始止损(ATR×2): ${stop_loss_short:.2f} (距离开仓价${stop_loss_short-current_price:.2f}, {(stop_loss_short-current_price)/current_price*100:.2f}%)")
+                            open_position(open_signal, current_price, stop_loss_short)
                         elif daily_current_dir:
-                            log.info(f"🚫 日线方向={daily_current_dir}，过滤反向信号={open_signal}")
+                            msg = f"🚫 [{now_str()}] 未开仓 | 交易对: {SYMBOL}\n开仓信号={open_signal.upper()}，但日线方向={daily_current_dir.upper()}，过滤反向信号"
+                            log.info(msg)
+                            send_telegram_message(msg)
                         else:
-                            log.info(f"⏳ 日线方向不明，等待明确信号")
+                            msg = f"⏳ [{now_str()}] 未开仓 | 交易对: {SYMBOL}\n日线方向不明，等待明确信号"
+                            log.info(msg)
+                            send_telegram_message(msg)
                 
                 # 标记该小时检查已完成
                 check_executed = True
