@@ -405,7 +405,14 @@ def open_position(direction, price, stop_loss):
             order = exchange.create_order(SYMBOL, 'market', 'sell', quantity, None, params)
         
         fill_price = order.get('average') or order.get('price') or price
-        log.info(f"✅ [{now_str()}] 开仓成功 | 成交均价: ${fill_price:.2f} | 订单ID: {order['id']}")
+        # 基于实际成交价格重新计算止损，避免信号价与成交价差异导致止损位置错误
+        if stop_loss:
+            atr_dist = abs(price - stop_loss)  # 原始ATR计算的止损距离
+            if direction == 'long':
+                stop_loss = fill_price - atr_dist
+            else:
+                stop_loss = fill_price + atr_dist
+        log.info(f"✅ [{now_str()}] 开仓成功 | 成交均价: ${fill_price:.2f} | 调整后止损: ${stop_loss:.2f}" if stop_loss else f"✅ [{now_str()}] 开仓成功 | 成交均价: ${fill_price:.2f}")
         
         # 发送 Telegram 通知
         tg_message = f"🚀 **开仓成功**\n\n" \
@@ -642,44 +649,44 @@ def check_close_condition(df1h):
         tg_message += f"🎯 跟踪波谷: ${tracking_valley:.2f}" if tracking_valley else "🎯 跟踪波谷: 未设置\n"
         tg_message += f"🛡️ 移动止损: ${trailing_stop:.2f}" if trailing_stop else "🛡️ 移动止损: 未设置\n"
 
-        # 【优化B-1】保本止损：盈利达到3%时，将止损移动到开仓价+1%（锁定至少1%盈利）
-        if max_profit_pct >= 3 and tracking_valley is not None and tracking_valley < entry_price * 1.01:
-            new_stop = entry_price * 1.01
+        # 【优化2-1】保本止损阶段2：盈利达到2%时，止损移到开仓价+0.8%（锁定至少0.8%盈利）
+        if max_profit_pct >= 2 and tracking_valley is not None and tracking_valley < entry_price * 1.008:
+            new_stop = entry_price * 1.008
             old_stop = tracking_valley
             position_tracker['tracking_valley'] = new_stop
             position_tracker['breakeven_stage'] = 2
             save_state()
             tracking_valley = new_stop
-            log.info(f"🛡️ 保本止损阶段2: 最高盈利{max_profit_pct:.2f}% >= 3%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价+1%）")
-            tg_message += f"🛡️ 保本止损: 止损 ${old_stop:.2f} → ${new_stop:.2f}（锁定1%盈利）\n"
-        # 【优化B-2】盈利达到1%时，将止损移动到开仓价（保本）
-        elif max_profit_pct >= 1 and tracking_valley is not None and tracking_valley < entry_price and breakeven_stage < 1:
+            log.info(f"🛡️ 保本止损阶段2: 最高盈利{max_profit_pct:.2f}% >= 2%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价+0.8%）")
+            tg_message += f"🛡️ 保本止损: 止损 ${old_stop:.2f} → ${new_stop:.2f}（锁定0.8%盈利）\n"
+        # 【优化2-2】保本止损阶段1：盈利达到0.8%时，止损移到开仓价（保本不亏）
+        elif max_profit_pct >= 0.8 and tracking_valley is not None and tracking_valley < entry_price and breakeven_stage < 1:
             new_stop = entry_price
             old_stop = tracking_valley
             position_tracker['tracking_valley'] = new_stop
             position_tracker['breakeven_stage'] = 1
             save_state()
             tracking_valley = new_stop
-            log.info(f"🛡️ 保本止损阶段1: 最高盈利{max_profit_pct:.2f}% >= 1%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价）")
+            log.info(f"🛡️ 保本止损阶段1: 最高盈利{max_profit_pct:.2f}% >= 0.8%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价）")
             tg_message += f"🛡️ 保本止损: 止损 ${old_stop:.2f} → ${new_stop:.2f}（保本）\n"
 
-        # 移动止损逻辑：盈利超过10%时启动
-        if max_profit_pct >= 10:
+        # 移动止损逻辑：盈利超过5%时启动
+        if max_profit_pct >= 5:
             if trailing_stop is None:
-                # 首次启动移动止损，锁定10%利润
-                trailing_stop_price = entry_price * (1 + 0.10)
+                # 首次启动移动止损，锁定5%利润
+                trailing_stop_price = entry_price * (1 + 0.05)
                 position_tracker['trailing_stop'] = trailing_stop_price
                 save_state()
-                log.info(f"🛡️ 启动移动止损: 锁定10%利润 @ ${trailing_stop_price:.2f}")
-                tg_message += f"✅ 启动移动止损: 锁定10%利润 @ ${trailing_stop_price:.2f}\n"
+                log.info(f"🛡️ 启动移动止损: 锁定5%利润 @ ${trailing_stop_price:.2f}")
+                tg_message += f"✅ 启动移动止损: 锁定5%利润 @ ${trailing_stop_price:.2f}\n"
             else:
                 # 检查是否触发移动止损
                 if current_price < trailing_stop:
                     log.info(f"🛡️ 移动止损触发: 当前价格 ${current_price:.2f} < 移动止损 ${trailing_stop:.2f}")
-                    log.info(f"   - 锁定利润: 10.00% | 回撤: {max_profit_pct - 10:.2f}%")
+                    log.info(f"   - 锁定利润: 5.00% | 回撤: {max_profit_pct - 5:.2f}%")
                     tg_message += f"🛡️ 平仓原因: 移动止损触发\n"
                     tg_message += f"   - 当前价格 ${current_price:.2f} < 移动止损 ${trailing_stop:.2f}\n"
-                    tg_message += f"   - 锁定利润: 10.00% | 回撤: {max_profit_pct - 10:.2f}%\n"
+                    tg_message += f"   - 锁定利润: 5.00% | 回撤: {max_profit_pct - 5:.2f}%\n"
                     send_telegram_message(tg_message)
                     return True
 
@@ -741,44 +748,44 @@ def check_close_condition(df1h):
         tg_message += f"🎯 跟踪波峰: ${tracking_peak:.2f}" if tracking_peak else "🎯 跟踪波峰: 未设置\n"
         tg_message += f"🛡️ 移动止损: ${trailing_stop:.2f}" if trailing_stop else "🛡️ 移动止损: 未设置\n"
 
-        # 【优化B-1】保本止损：盈利达到3%时，将止损移动到开仓价-1%（锁定至少1%盈利）
-        if max_profit_pct >= 3 and tracking_peak is not None and tracking_peak > entry_price * 0.99:
-            new_stop = entry_price * 0.99
+        # 【优化2-1】保本止损阶段2：盈利达到2%时，止损移到开仓价-0.8%（锁定至少0.8%盈利）
+        if max_profit_pct >= 2 and tracking_peak is not None and tracking_peak > entry_price * 0.992:
+            new_stop = entry_price * 0.992
             old_stop = tracking_peak
             position_tracker['tracking_peak'] = new_stop
             position_tracker['breakeven_stage'] = 2
             save_state()
             tracking_peak = new_stop
-            log.info(f"🛡️ 保本止损阶段2: 最高盈利{max_profit_pct:.2f}% >= 3%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价-1%）")
-            tg_message += f"🛡️ 保本止损: 止损 ${old_stop:.2f} → ${new_stop:.2f}（锁定1%盈利）\n"
-        # 【优化B-2】盈利达到1%时，将止损移动到开仓价（保本）
-        elif max_profit_pct >= 1 and tracking_peak is not None and tracking_peak > entry_price and breakeven_stage < 1:
+            log.info(f"🛡️ 保本止损阶段2: 最高盈利{max_profit_pct:.2f}% >= 2%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价-0.8%）")
+            tg_message += f"🛡️ 保本止损: 止损 ${old_stop:.2f} → ${new_stop:.2f}（锁定0.8%盈利）\n"
+        # 【优化2-2】保本止损阶段1：盈利达到0.8%时，止损移到开仓价（保本不亏）
+        elif max_profit_pct >= 0.8 and tracking_peak is not None and tracking_peak > entry_price and breakeven_stage < 1:
             new_stop = entry_price
             old_stop = tracking_peak
             position_tracker['tracking_peak'] = new_stop
             position_tracker['breakeven_stage'] = 1
             save_state()
             tracking_peak = new_stop
-            log.info(f"🛡️ 保本止损阶段1: 最高盈利{max_profit_pct:.2f}% >= 1%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价）")
+            log.info(f"🛡️ 保本止损阶段1: 最高盈利{max_profit_pct:.2f}% >= 0.8%，将止损从 ${old_stop:.2f} → ${new_stop:.2f}（开仓价）")
             tg_message += f"🛡️ 保本止损: 止损 ${old_stop:.2f} → ${new_stop:.2f}（保本）\n"
 
-        # 移动止损逻辑：盈利超过10%时启动
-        if max_profit_pct >= 10:
+        # 移动止损逻辑：盈利超过5%时启动
+        if max_profit_pct >= 5:
             if trailing_stop is None:
-                # 首次启动移动止损，锁定10%利润
-                trailing_stop_price = entry_price * (1 - 0.10)
+                # 首次启动移动止损，锁定5%利润
+                trailing_stop_price = entry_price * (1 - 0.05)
                 position_tracker['trailing_stop'] = trailing_stop_price
                 save_state()
-                log.info(f"🛡️ 启动移动止损: 锁定10%利润 @ ${trailing_stop_price:.2f}")
-                tg_message += f"✅ 启动移动止损: 锁定10%利润 @ ${trailing_stop_price:.2f}\n"
+                log.info(f"🛡️ 启动移动止损: 锁定5%利润 @ ${trailing_stop_price:.2f}")
+                tg_message += f"✅ 启动移动止损: 锁定5%利润 @ ${trailing_stop_price:.2f}\n"
             else:
                 # 检查是否触发移动止损
                 if current_price > trailing_stop:
                     log.info(f"🛡️ 移动止损触发: 当前价格 ${current_price:.2f} > 移动止损 ${trailing_stop:.2f}")
-                    log.info(f"   - 锁定利润: 10.00% | 回撤: {max_profit_pct - 10:.2f}%")
+                    log.info(f"   - 锁定利润: 5.00% | 回撤: {max_profit_pct - 5:.2f}%")
                     tg_message += f"🛡️ 平仓原因: 移动止损触发\n"
                     tg_message += f"   - 当前价格 ${current_price:.2f} > 移动止损 ${trailing_stop:.2f}\n"
-                    tg_message += f"   - 锁定利润: 10.00% | 回撤: {max_profit_pct - 10:.2f}%\n"
+                    tg_message += f"   - 锁定利润: 5.00% | 回撤: {max_profit_pct - 5:.2f}%\n"
                     send_telegram_message(tg_message)
                     return True
 
@@ -894,9 +901,20 @@ def main():
                     # 获取日线方向（使用昨天已完成的K线）
                     daily_current_dir, _ = get_daily_close_direction()
 
-                    # 如果持仓方向与日线方向相反，检查是否需要平仓
+                    # 如果持仓方向与日线方向相反，检查是否需要平仓（持仓至少4小时后才允许因日线反向被强制平仓）
                     if daily_current_dir:
-                        if position == 'long' and daily_current_dir == 'short':
+                        entry_time = position_tracker.get('entry_time')
+                        hours_held = 0
+                        try:
+                            if entry_time:
+                                from datetime import datetime
+                                entry_dt = datetime.strptime(entry_time, '%Y-%m-%d %H:%M:%S')
+                                hours_held = (datetime.now() - entry_dt).total_seconds() / 3600
+                        except:
+                            hours_held = 0
+                        if hours_held < 4:
+                            log.info(f"⏸️ 日线方向={daily_current_dir} 与持仓方向={position} 相反，但仅持仓{hours_held:.1f}小时（<4小时保护期），跳过强制平仓")
+                        elif position == 'long' and daily_current_dir == 'short':
                             # 多单但日线空头：检查最低价是否跌破波谷
                             current_valley = get_last_valley(df1h)
                             current_low = df1h['low'].iloc[-1]
@@ -935,14 +953,14 @@ def main():
                     
                     open_signal = check_open_condition(df1h)
                     if open_signal:
-                        # 【方案4优化A】使用ATR动态止损代替波峰波谷
+                        # 【优化1】使用ATR动态止损（ATR×1.5更紧，控制单笔亏损）
                         atr = get_atr(df1h)
-                        atr_multiplier = 2.0  # ATR倍数
+                        atr_multiplier = 1.5  # ATR倍数（原2.0，收紧止损）
                         if atr is None or atr < 0.1:
-                            # ATR不可用时，使用固定2%止损
-                            log.warning(f"⚠️ ATR不可用，使用固定2%止损")
-                            stop_loss_long = current_price * 0.98
-                            stop_loss_short = current_price * 1.02
+                            # ATR不可用时，使用固定1.5%止损
+                            log.warning(f"⚠️ ATR不可用，使用固定1.5%止损")
+                            stop_loss_long = current_price * 0.985
+                            stop_loss_short = current_price * 1.015
                         else:
                             stop_loss_long = current_price - atr * atr_multiplier
                             stop_loss_short = current_price + atr * atr_multiplier
