@@ -14,7 +14,7 @@ SYMBOL = 'ETH-USDT-SWAP'
 TIMEFRAME_1H, TIMEFRAME_4H = '1h', '4h'
 RSI_PERIOD = 6
 MACD_FAST, MACD_SLOW, MACD_SIGNAL = 12, 26, 9
-LONG_BUY, LONG_SELL, SHORT_BUY, SHORT_SELL = 30, 80, 70, 30
+LONG_BUY, LONG_SELL, SHORT_BUY, SHORT_SELL = 35, 75, 75, 35
 STOP_LOSS_PCT = 0.08
 LEVERAGE = 5
 STEP_EQUITY_PCT = 0.15
@@ -32,7 +32,9 @@ def send_telegram(message):
     if not TG_TOKEN or not TG_CHAT_ID: return
     try:
         url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
-        requests.post(url, data={'chat_id': TG_CHAT_ID, 'text': message, 'parse_mode': 'HTML'})
+        r = requests.post(url, data={'chat_id': TG_CHAT_ID, 'text': message})
+        if r.status_code != 200:
+            log.error(f"Telegram推送返回错误: {r.text}")
     except Exception as e: log.error(f"Telegram推送失败: {e}")
 
 exchange = ccxt.okx({
@@ -78,6 +80,25 @@ def fetch_klines(tf, limit=100):
         log.error(f"获取 {tf} K线失败: {e}")
         return None
 
+def get_equity():
+    try:
+        balance = exchange.fetch_balance()
+        return float(balance.get('USDT', {}).get('total', 500.0))
+    except: return 500.0
+
+def get_contracts_from_usdt(usdt_amount, leverage):
+    try:
+        ticker = exchange.fetch_ticker(SYMBOL)
+        price = ticker['last']
+        # 1 张 ETH-USDT-SWAP 面值 = 0.1 ETH
+        contract_value = price * 0.1
+        # 计算需要的张数: (金额 * 杠杆) / 合约面值
+        contracts = (usdt_amount * leverage) / contract_value
+        return max(1, int(round(contracts)))
+    except Exception as e:
+        log.error(f"计算张数失败: {e}")
+        return 1
+
 def execute_order(side, amount, pos_side):
     try:
         order = exchange.create_order(symbol=SYMBOL, type='market', side=side, amount=amount, params={'posSide': pos_side})
@@ -106,8 +127,9 @@ def run_strategy():
     if pd.isna(rsi) or pd.isna(h) or pd.isna(hp): return
 
     m_up, m_down = h > hp, h < hp
-    # ETH 每次加仓 1 张 (0.1 ETH, 5x杠杆需保证金约 50U)
-    step_qty = 1
+    
+    # 动态计算加仓张数（目标投入 10U 保证金）
+    step_qty = get_contracts_from_usdt(10, LEVERAGE)
     max_allowed = step_qty * MAX_POS_STEPS
 
     # 循环检查推送
